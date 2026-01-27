@@ -1,0 +1,75 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tor-session-manager"
+version = "1.0.0"
+description = "A lightweight Python library for managing Tor sessions and rotating circuits"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Pablo Alaniz", email = "pablo@culturainteractiva.com"}
+]
+keywords = [
+    "tor",
+    "proxy",
+    "privacy",
+    "scraping",
+    "security",
+    "anonymity",
+    "circuit-rotation",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: Proxy Servers",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "requests>=2.25.0",
+    "stem>=1.8.0",
+    "PySocks>=1.7.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/PabloAlaniz/tor-session-manager"
+Repository = "https://github.com/PabloAlaniz/tor-session-manager"
+Issues = "https://github.com/PabloAlaniz/tor-session-manager/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.0.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["tor_session_manager*"]
+
+[tool.black]
+line-length = 88
+target-version = ["py38", "py39", "py310", "py311", "py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
