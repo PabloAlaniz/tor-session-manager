@@ -160,6 +160,36 @@ with client.rotated_session():
 | `TorNotReadyError` | Tor no está completamente bootstrapped |
 | `IPFetchError` | No se puede determinar la IP pública |
 
+## ⚙️ Cómo Funciona
+
+Esta librería actúa como un puente entre tu código Python y la red Tor:
+
+```
+Tu código  →  TorClient  →  Tor Proxy (SOCKS5)  →  Internet
+                   ↕
+            Controlador Tor
+           (rotación de circuitos)
+```
+
+### Componentes
+
+1. **Proxy SOCKS5** (puerto 9050): Tu tráfico HTTP/HTTPS pasa por acá para salir a través de Tor
+2. **Puerto de Control** (puerto 9051): Permite enviar comandos a Tor (como rotar circuitos)
+3. **TorClient**: Maneja la autenticación y envía señales al controlador
+
+### Flujo de Rotación
+
+1. Se envía señal `NEWNYM` al puerto de control de Tor
+2. Tor construye un nuevo circuito con diferentes nodos relay
+3. Se espera `rotate_delay` segundos (por defecto 2s) para que el circuito se establezca
+4. Las próximas requests usarán el nuevo circuito → nueva IP de salida
+
+### Limitaciones
+
+- **Rate limits de Tor**: No podés rotar circuitos instantáneamente. Tor tiene límites (~10 rotaciones/min)
+- **Velocidad**: Tor es más lento que una conexión directa (3+ saltos en la red)
+- **Misma IP posible**: Ocasionalmente podés obtener la misma IP después de rotar (aunque es poco probable)
+
 ## 🔧 Configuración
 
 ### Puertos Personalizados
@@ -201,6 +231,79 @@ if client.is_ready():
         print(f"📍 Tu IP de Tor: {client.get_ip()}")
 else:
     print("❌ Tor no está listo - verificá la instalación")
+```
+
+## 🔍 Troubleshooting
+
+### "TorConnectionError: Failed to connect to Tor controller"
+
+**Causas comunes:**
+- Tor no está corriendo → `brew services start tor` (macOS) o `sudo systemctl start tor` (Linux)
+- Puerto de control no habilitado → agregá `ControlPort 9051` en `torrc`
+- Firewall bloqueando conexión local
+
+**Verificar:**
+```bash
+# Verificar si Tor está corriendo
+ps aux | grep tor
+
+# En Linux, verificar status
+sudo systemctl status tor
+```
+
+### "TorNotReadyError: Tor is not fully bootstrapped"
+
+Tor puede tardar unos segundos en conectarse a la red. Esperá ~10-15 segundos después de iniciar Tor antes de usar la librería.
+
+**Verificar status:**
+```python
+from tor_session_manager import TorClient
+
+client = TorClient()
+if client.is_ready():
+    print("✅ Listo")
+else:
+    print("❌ Esperá un momento y volvé a intentar")
+```
+
+### "IPFetchError: Failed to fetch IP address"
+
+**Causas:**
+- Tor no está ruteando el tráfico correctamente
+- Problema de conectividad general
+- Sitio de verificación de IP bloqueado
+
+**Solución:**
+1. Verificá que Tor esté corriendo
+2. Probá manualmente: `curl --proxy socks5h://127.0.0.1:9050 https://api.ipify.org`
+3. Si falla, verificá la configuración de Tor
+
+### Puertos personalizados no funcionan
+
+Si cambiaste los puertos en `torrc`, asegurate de reiniciar Tor:
+
+```bash
+# macOS
+brew services restart tor
+
+# Linux
+sudo systemctl restart tor
+```
+
+### La rotación no cambia la IP
+
+Esto puede pasar ocasionalmente. Tor tiene un pool finito de nodos de salida y puede asignarte el mismo. Intentá rotar nuevamente o esperá unos segundos.
+
+### Logging para debugging
+
+Habilitá logs detallados para ver qué está pasando:
+
+```python
+import logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 ```
 
 ## 🤝 Contribuciones
