@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tor-session-manager"
-version = "1.9.0"
+version = "1.10.0"
 description = "A lightweight Python library for managing Tor sessions and rotating circuits"
 readme = "README.md"
 license = {text = "MIT"}
@@ -48,6 +48,12 @@ Homepage = "https://github.com/PabloAlaniz/tor-session-manager"
 Repository = "https://github.com/PabloAlaniz/tor-session-manager"
 Issues = "https://github.com/PabloAlaniz/tor-session-manager/issues"
 
+[project.scripts]
+tor-session = "tor_session_manager.cli:main"
+
+[project.entry-points.pytest11]
+tor_session_manager = "tor_session_manager.pytest_plugin"
+
 [project.optional-dependencies]
 async = [
     "aiohttp>=3.8",
@@ -63,6 +69,9 @@ dev = [
 
 [tool.setuptools.packages.find]
 include = ["tor_session_manager*"]
+
+[tool.setuptools.package-data]
+tor_session_manager = ["py.typed"]
 
 [tool.black]
 line-length = 88

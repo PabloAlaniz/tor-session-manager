@@ -13,7 +13,7 @@ Tor-proxied one) so they can be unit-tested without a running Tor daemon.
 import logging
 import statistics
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,12 @@ class CircuitHealth:
     def ok(self) -> bool:
         """True if at least one metric was resolved."""
         return self.latency_ms is not None or self.throughput_kbps is not None
+
+    def as_dict(self) -> dict:
+        """A JSON-serializable dict of this snapshot (includes ``ok``)."""
+        data = asdict(self)
+        data["ok"] = self.ok
+        return data
 
 
 def measure_latency(session, url: str, timeout: float, samples: int = 3) -> float:

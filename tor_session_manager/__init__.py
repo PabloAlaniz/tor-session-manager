@@ -39,7 +39,7 @@ except ImportError:
 
     AsyncResponse = None  # type: ignore[assignment,misc]
 
-__version__ = "1.9.0"
+__version__ = "1.10.0"
 __author__ = "Pablo Alaniz"
 __email__ = "pablo@culturainteractiva.com"
 

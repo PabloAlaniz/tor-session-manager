@@ -87,6 +87,16 @@ def test_circuit_health_ok_flag():
     assert CircuitHealth().ok is False
 
 
+def test_circuit_health_as_dict_is_json_serializable():
+    import json
+
+    data = CircuitHealth(latency_ms=12.0, throughput_kbps=None, samples=2).as_dict()
+    assert data["latency_ms"] == 12.0
+    assert data["throughput_kbps"] is None
+    assert data["ok"] is True
+    json.dumps(data)  # must not raise
+
+
 # --- TorClient.benchmark -----------------------------------------------------
 
 

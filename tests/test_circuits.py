@@ -118,6 +118,21 @@ def test_parse_circuit_empty_path_has_no_exit():
     assert info.exit_country is None
 
 
+def test_circuit_info_as_dict_is_json_serializable():
+    import json
+
+    circuit = _FakeCircuit("1", path=[("AAAA", "guard"), ("CCCC", "exit")])
+    controller = _FakeController(
+        network_status={"CCCC": _Status(address="1.2.3.4")},
+        countries={"1.2.3.4": "de"},
+    )
+    data = parse_circuit(controller, circuit).as_dict()
+    assert data["id"] == "1"
+    assert data["exit_country"] == "de"
+    assert [hop["fingerprint"] for hop in data["path"]] == ["AAAA", "CCCC"]
+    json.dumps(data)  # must not raise
+
+
 # --- TorClient methods -------------------------------------------------------
 
 

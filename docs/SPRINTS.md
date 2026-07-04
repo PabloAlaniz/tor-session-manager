@@ -82,11 +82,12 @@ IP checkers con fallback, rotación verificable y reintentos.
 - `TorClient(rotate_headers=..., rate_limit=...)` integrado en `request()`. JA3/TLS documentado como
   límite conocido (requiere curl_cffi, fuera de alcance).
 
-### Sprint 10 — CLI, observabilidad, integraciones y release ⚡🛡️
-- CLI `tor-session` (rotate, ip, benchmark, circuit-info).
-- Export de métricas/health (JSON / Prometheus-friendly).
-- Integraciones: middleware Scrapy, fixture pytest.
-- Docs (Sphinx), workflow de publicación a PyPI, `py.typed`, badges.
+### Sprint 10 — CLI, observabilidad, integraciones y release ⚡🛡️ ✅ (v1.10.0)
+- CLI `tor-session` (`ip`/`rotate`/`circuit`/`country`/`benchmark`/`status --json`) en `cli.py`.
+- Observabilidad: `CircuitHealth.as_dict()` / `CircuitInfo.as_dict()` serializables + `status --json`.
+- Fixture de pytest (`tor_client`) vía entry point `pytest11`; `py.typed` (PEP 561).
+- Workflow `publish.yml` (PyPI trusted publishing en release) + badges. Scrapy documentado como
+  futuro (no soporta SOCKS nativo).
 
 ---
 
@@ -114,4 +115,9 @@ IP checkers con fallback, rotación verificable y reintentos.
 - **Sprint 7**: ✅ implementado en v1.7.0.
 - **Sprint 8**: ✅ implementado en v1.8.0.
 - **Sprint 9**: ✅ implementado en v1.9.0.
-- **Sprint 10**: planificado.
+- **Sprint 10**: ✅ implementado en v1.10.0.
+
+**🎉 Roadmap completo — 10/10 sprints.** Ambos ejes cubiertos: 🛡️ saltar bloqueos (selección de
+exit, detección/auto-rotación, bridges + pluggable transports, anti-fingerprint) y ⚡ calidad
+(robustez, introspección, medición, best-circuit, async). Paquete listo para release (CLI, `py.typed`,
+workflow de PyPI).

@@ -8,7 +8,7 @@ node is located. This is the visibility foundation that later sprints
 """
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import List, Optional
 
 logger = logging.getLogger(__name__)
@@ -45,6 +45,12 @@ class CircuitInfo:
         """Country code of the exit relay, if resolved."""
         exit_relay = self.exit_relay
         return exit_relay.country if exit_relay else None
+
+    def as_dict(self) -> dict:
+        """A JSON-serializable dict of this circuit (recurses into ``path``)."""
+        data = asdict(self)
+        data["exit_country"] = self.exit_country
+        return data
 
 
 def _resolve_relay(controller, fingerprint: str, nickname: Optional[str]) -> RelayInfo:

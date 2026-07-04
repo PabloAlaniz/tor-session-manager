@@ -2,7 +2,9 @@
 
 Una librería Python liviana para gestionar sesiones Tor y rotar circuitos programáticamente.
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![CI](https://github.com/PabloAlaniz/tor-session-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/PabloAlaniz/tor-session-manager/actions/workflows/ci.yml)
+[![PyPI version](https://img.shields.io/pypi/v/tor-session-manager.svg)](https://pypi.org/project/tor-session-manager/)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## 🎯 Casos de Uso
@@ -389,6 +391,36 @@ o `shuffle=True`) y `RateLimiter` (pacing por host con `acquire()`/`record()`).
 > ⚠️ **Sobre TLS/JA3:** `requests` usa el `ssl` de la stdlib, así que el fingerprint **JA3/TLS del
 > handshake es fijo** y no se puede cambiar desde esta librería. La rotación de headers es la palanca
 > a nivel *aplicación*; para spoofear JA3 haría falta algo como `curl_cffi` (fuera de alcance).
+
+## 🖥️ CLI
+
+Instalar el paquete deja disponible el comando `tor-session`:
+
+```bash
+tor-session ip                 # IP de salida actual
+tor-session rotate             # rota y muestra la nueva IP
+tor-session circuit            # relays del circuito activo y país de salida
+tor-session country            # país del nodo de salida
+tor-session benchmark          # latencia + throughput del circuito
+tor-session status --json      # snapshot completo en JSON (para monitoreo)
+```
+
+Flags globales: `--control-port`, `--socks-port`, `--password` y `--json` (salida machine-readable
+para integrar con scripts o dashboards). Ejemplo de observabilidad:
+
+```bash
+tor-session status --json | jq '{ip, exit_country, latency: .health.latency_ms}'
+```
+
+## 🧪 Fixture de pytest
+
+El paquete registra una fixture `tor_client` (vía entry point de pytest) que provee un `TorClient`
+listo, o **skipea** el test si Tor no está corriendo:
+
+```python
+def test_mi_scraper(tor_client):
+    assert tor_client.get_ip()  # se saltea automáticamente si no hay Tor
+```
 
 **Context Managers:**
 
