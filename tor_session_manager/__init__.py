@@ -18,6 +18,8 @@ from .exceptions import (
     TorNotReadyError,
     TorSessionError,
 )
+from .fingerprint import BROWSER_PROFILES, HeaderProfile, HeaderRotator
+from .pacing import RateLimiter
 from .pool import CircuitPool, PooledCircuit
 from .quality import CircuitHealth
 
@@ -37,7 +39,7 @@ except ImportError:
 
     AsyncResponse = None  # type: ignore[assignment,misc]
 
-__version__ = "1.8.0"
+__version__ = "1.9.0"
 __author__ = "Pablo Alaniz"
 __email__ = "pablo@culturainteractiva.com"
 
@@ -56,6 +58,10 @@ __all__ = [
     "parse_bridge_line",
     "build_bridge_config",
     "launch_bridged_tor",
+    "HeaderProfile",
+    "HeaderRotator",
+    "BROWSER_PROFILES",
+    "RateLimiter",
     "TorSessionError",
     "TorConnectionError",
     "TorNotReadyError",

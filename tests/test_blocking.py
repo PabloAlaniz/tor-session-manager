@@ -86,6 +86,50 @@ def test_request_uses_tor_session():
     assert client._session.called == ("POST", "http://x", TorClient.IP_CHECK_TIMEOUT)
 
 
+# --- request: header rotation + pacing (Sprint 9) ----------------------------
+
+
+class _RecordingSession:
+    def __init__(self, status=200):
+        self.status = status
+        self.last_headers = None
+
+    def request(self, method, url, timeout, **kwargs):
+        self.last_headers = kwargs.get("headers")
+        return _Resp(self.status)
+
+
+def test_request_injects_rotated_headers():
+    client = TorClient(rotate_headers=True)
+    client._session = _RecordingSession()
+    client.request("http://x")
+    assert "User-Agent" in client._session.last_headers
+
+
+def test_request_does_not_override_explicit_headers():
+    client = TorClient(rotate_headers=True)
+    client._session = _RecordingSession()
+    client.request("http://x", headers={"User-Agent": "MINE"})
+    assert client._session.last_headers == {"User-Agent": "MINE"}
+
+
+def test_request_paces_and_records(monkeypatch):
+    client = TorClient(rate_limit=1.0)
+    client._session = _RecordingSession(status=429)
+    calls = {"acquire": [], "record": []}
+    monkeypatch.setattr(
+        client._rate_limiter, "acquire", lambda host: calls["acquire"].append(host)
+    )
+    monkeypatch.setattr(
+        client._rate_limiter,
+        "record",
+        lambda host, status: calls["record"].append((host, status)),
+    )
+    client.request("http://example.com/path")
+    assert calls["acquire"] == ["example.com"]
+    assert calls["record"] == [("example.com", 429)]
+
+
 # --- request_with_retry ------------------------------------------------------
 
 

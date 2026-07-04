@@ -76,10 +76,11 @@ IP checkers con fallback, rotación verificable y reintentos.
   ClientTransportPlugin).
 - `BridgeConfigError` (bridge line inválida / binario PT faltante).
 
-### Sprint 9 — Fingerprint de request + pacing adaptativo 🛡️⚡
-- Rotación de User-Agent / perfiles de headers coherentes.
-- Consideraciones de TLS/JA3 (documentar límites; ofrecer perfiles de headers).
-- Rate limiting adaptativo (backoff ante 429, ritmo por host).
+### Sprint 9 — Fingerprint de request + pacing adaptativo 🛡️⚡ ✅ (v1.9.0)
+- `fingerprint.py`: `HeaderProfile`/`BROWSER_PROFILES` (perfiles coherentes) + `HeaderRotator`.
+- `pacing.py`: `RateLimiter` (pacing por host, backoff ante 429/503, decay en OK).
+- `TorClient(rotate_headers=..., rate_limit=...)` integrado en `request()`. JA3/TLS documentado como
+  límite conocido (requiere curl_cffi, fuera de alcance).
 
 ### Sprint 10 — CLI, observabilidad, integraciones y release ⚡🛡️
 - CLI `tor-session` (rotate, ip, benchmark, circuit-info).
@@ -112,4 +113,5 @@ IP checkers con fallback, rotación verificable y reintentos.
 - **Sprint 6**: ✅ implementado en v1.6.0.
 - **Sprint 7**: ✅ implementado en v1.7.0.
 - **Sprint 8**: ✅ implementado en v1.8.0.
-- **Sprints 9–10**: planificados.
+- **Sprint 9**: ✅ implementado en v1.9.0.
+- **Sprint 10**: planificado.

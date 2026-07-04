@@ -98,21 +98,39 @@ class TorClient:
         socks_port: int = DEFAULT_SOCKS_PORT,
         password: Optional[str] = None,
         rotate_delay: float = DEFAULT_ROTATE_DELAY,
+        rotate_headers: bool = False,
+        rate_limit: Optional[float] = None,
     ):
         """
         Initialize the Tor client.
-        
+
         Args:
             control_port: Tor control port (default: 9051)
             socks_port: Tor SOCKS proxy port (default: 9050)
             password: Control port password if not using cookie auth
             rotate_delay: Seconds to wait after rotation (default: 2.0)
+            rotate_headers: Rotate browser header profiles per request via
+                :meth:`request` (default: False)
+            rate_limit: If set, minimum seconds between requests per host, with
+                adaptive backoff on 429/503 (default: None, no pacing)
         """
         self.control_port = control_port
         self.socks_port = socks_port
         self.password = password
         self.rotate_delay = rotate_delay
         self._session: Optional[requests.Session] = None
+
+        self._header_rotator = None
+        if rotate_headers:
+            from .fingerprint import HeaderRotator
+
+            self._header_rotator = HeaderRotator()
+
+        self._rate_limiter = None
+        if rate_limit is not None:
+            from .pacing import RateLimiter
+
+            self._rate_limiter = RateLimiter(min_interval=rate_limit)
     
     def __enter__(self) -> "TorClient":
         """Context manager entry - verifies Tor is ready."""
@@ -598,11 +616,24 @@ class TorClient:
         Returns:
             The ``requests.Response``.
         """
+        if self._header_rotator is not None and "headers" not in kwargs:
+            kwargs["headers"] = self._header_rotator.next()
+
+        host = ""
+        if self._rate_limiter is not None:
+            from urllib.parse import urlparse
+
+            host = urlparse(url).hostname or ""
+            self._rate_limiter.acquire(host)
+
         session = self._session or self._create_session()
         try:
-            return session.request(
+            response = session.request(
                 method, url, timeout=timeout or self.IP_CHECK_TIMEOUT, **kwargs
             )
+            if self._rate_limiter is not None:
+                self._rate_limiter.record(host, response.status_code)
+            return response
         finally:
             if not self._session:
                 session.close()
@@ -647,9 +678,7 @@ class TorClient:
             if reason is None:
                 return response
             if attempt < max_rotations:
-                logger.info(
-                    "Response blocked (%s); rotating exit and retrying", reason
-                )
+                logger.info("Response blocked (%s); rotating exit and retrying", reason)
                 self.rotate()
 
         raise BlockedResponseError(

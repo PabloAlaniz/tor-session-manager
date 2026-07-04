@@ -368,6 +368,28 @@ proc.terminate()  # cerrar el Tor gestionado al terminar
 en un Tor ya corriendo), por eso el flujo soportado es lanzar un Tor propio. También podés usar
 `parse_bridge_line()` y `build_bridge_config()` por separado si querés armar tu propio `torrc`.
 
+### Anti-fingerprint: rotación de headers + pacing
+
+Rotar la IP no alcanza si cada request lleva el mismo `User-Agent`: ese fingerprint te identifica igual.
+`TorClient` puede rotar perfiles de headers coherentes (de navegadores reales) y pacear el ritmo por
+host con backoff adaptativo ante 429:
+
+```python
+client = TorClient(rotate_headers=True, rate_limit=1.0)  # 1s mínimo entre requests por host
+
+with client:
+    # request() inyecta un perfil de headers distinto por request y respeta el ritmo
+    r1 = client.request("https://ejemplo.com/a")
+    r2 = client.request("https://ejemplo.com/b")  # espera ~1s; si el host devuelve 429, el ritmo se ensancha
+```
+
+También podés usar los componentes sueltos: `HeaderRotator` (round-robin sobre `BROWSER_PROFILES`,
+o `shuffle=True`) y `RateLimiter` (pacing por host con `acquire()`/`record()`).
+
+> ⚠️ **Sobre TLS/JA3:** `requests` usa el `ssl` de la stdlib, así que el fingerprint **JA3/TLS del
+> handshake es fijo** y no se puede cambiar desde esta librería. La rotación de headers es la palanca
+> a nivel *aplicación*; para spoofear JA3 haría falta algo como `curl_cffi` (fuera de alcance).
+
 **Context Managers:**
 
 ```python
