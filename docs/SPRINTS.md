@@ -59,10 +59,10 @@ IP checkers con fallback, rotación verificable y reintentos.
   `benchmark()`, `ranked()`, `fastest()`, `pin_fastest()` (+ `pinned_proxies`).
 - `drop(circuit)` y `prune(keep)` para descartar lentos/bloqueados. `TorClient.circuit_pool()`.
 
-### Sprint 6 — Detección de bloqueo del destino + auto-rotación 🛡️
-- Detección de respuesta bloqueada: 403/429, challenge de Cloudflare/CAPTCHA → `BlockedResponseError`.
-- `is_exit_blocklisted()` (lista de exits Tor / DNSBL).
-- `request_with_retry()` que rota a un exit nuevo cuando detecta bloqueo.
+### Sprint 6 — Detección de bloqueo del destino + auto-rotación 🛡️ ✅ (v1.6.0)
+- `blocking.py` con `detect_block()` (challenges de Cloudflare/CAPTCHA, 403/429/503, markers ajustables).
+- `TorClient.request()`, `request_with_retry()` (rota ante bloqueo) e `is_exit_blocklisted()`.
+- `BlockedResponseError` (con `.reason`/`.response`).
 
 ### Sprint 7 — Soporte async (`TorClientAsync`) ⚡
 - `TorClientAsync` con `aiohttp` + SOCKS async; rotate/get_ip/benchmark async.
@@ -108,4 +108,5 @@ IP checkers con fallback, rotación verificable y reintentos.
 - **Sprint 3**: ✅ implementado en v1.3.0.
 - **Sprint 4**: ✅ implementado en v1.4.0.
 - **Sprint 5**: ✅ implementado en v1.5.0.
-- **Sprints 6–10**: planificados.
+- **Sprint 6**: ✅ implementado en v1.6.0.
+- **Sprints 7–10**: planificados.

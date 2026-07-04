@@ -149,6 +149,9 @@ TorClient(
 | `new_circuit(exit_country=None, exit_fingerprint=None, ...)` | Construir circuito nuevo con el exit elegido |
 | `pinned_exit(...)` | Context manager: fija el exit y lo limpia al salir |
 | `circuit_pool(size=3)` | Crear un `CircuitPool` de circuitos aislados ligado a este cliente |
+| `request(url, method="GET", ...)` | Hacer un request a través de Tor |
+| `request_with_retry(url, max_rotations=3, ...)` | Request que rota a un exit nuevo si detecta bloqueo |
+| `is_exit_blocklisted(url)` | Motivo de bloqueo del exit actual al pedir `url` (o `None`) |
 | `proxies` | Propiedad que devuelve dict de proxy para requests |
 
 > 💡 **Rotación verificada:** `rotate()` a veces reutiliza el mismo nodo de salida, así que la IP puede
@@ -265,6 +268,38 @@ credencial por un circuito separado. `PooledCircuit` expone `session`, `proxies`
 (`CircuitHealth`) y `exit_ip`. `drop(circuit)` recicla un lane (nueva credencial = circuito nuevo),
 útil para descartar uno lento o bloqueado.
 
+### Detección de bloqueo del destino y auto-rotación
+
+Muchos sitios bloquean IPs de salida Tor (Cloudflare, CAPTCHA, 403/429). `request_with_retry()`
+detecta esas respuestas y rota a un exit nuevo automáticamente hasta pasar:
+
+```python
+with TorClient() as client:
+    # Rota de exit hasta obtener una respuesta no bloqueada (o levanta BlockedResponseError)
+    response = client.request_with_retry("https://sitio-que-bloquea-tor.com", max_rotations=5)
+    print(response.status_code)
+
+    # ¿El exit actual está bloqueado por este sitio?
+    motivo = client.is_exit_blocklisted("https://sitio-que-bloquea-tor.com")
+    if motivo:
+        print(f"Exit bloqueado: {motivo}")
+```
+
+La detección (`detect_block`) reconoce challenges de Cloudflare/CAPTCHA en el body y statuses de
+bloqueo (403/429/503). Es **heurística** —un 403 legítimo puede parecer un bloqueo—, así que los
+marcadores y statuses son ajustables:
+
+```python
+response = client.request_with_retry(
+    url,
+    markers=("acceso denegado", "captcha"),   # marcadores de challenge propios
+    statuses={403, 429, 503, 418},             # statuses considerados bloqueo
+)
+```
+
+Cuando se agotan las rotaciones sin éxito, levanta `BlockedResponseError` (con `.reason` y
+`.response` para inspeccionar el último intento).
+
 **Context Managers:**
 
 ```python
@@ -287,6 +322,7 @@ with client.rotated_session():
 | `TorNotReadyError` | Tor no está completamente bootstrapped |
 | `IPFetchError` | No se puede determinar la IP pública |
 | `AllIPCheckersFailedError` | Fallaron todos los servicios de checkeo de IP (subclase de `IPFetchError`) |
+| `BlockedResponseError` | La respuesta siguió bloqueada tras agotar las rotaciones de exit |
 
 ## ⚙️ Cómo Funciona
 

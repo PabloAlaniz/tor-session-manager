@@ -5,10 +5,12 @@ A lightweight library for managing Tor sessions and rotating circuits,
 designed for ethical web scraping, security research, and privacy testing.
 """
 
+from .blocking import detect_block
 from .circuits import CircuitInfo, RelayInfo
 from .client import TorClient, rotate_and_get_ip
 from .exceptions import (
     AllIPCheckersFailedError,
+    BlockedResponseError,
     IPFetchError,
     TorConnectionError,
     TorNotReadyError,
@@ -17,7 +19,7 @@ from .exceptions import (
 from .pool import CircuitPool, PooledCircuit
 from .quality import CircuitHealth
 
-__version__ = "1.5.0"
+__version__ = "1.6.0"
 __author__ = "Pablo Alaniz"
 __email__ = "pablo@culturainteractiva.com"
 
@@ -29,9 +31,11 @@ __all__ = [
     "CircuitHealth",
     "CircuitPool",
     "PooledCircuit",
+    "detect_block",
     "TorSessionError",
     "TorConnectionError",
     "TorNotReadyError",
     "IPFetchError",
     "AllIPCheckersFailedError",
+    "BlockedResponseError",
 ]

@@ -13,8 +13,10 @@ import requests
 from stem import Signal
 from stem.control import Controller
 
+from .blocking import detect_block
 from .circuits import CircuitInfo, parse_circuit
 from .exceptions import (
+    BlockedResponseError,
     IPFetchError,
     TorConnectionError,
     TorNotReadyError,
@@ -576,6 +578,98 @@ class TorClient:
             yield self
         finally:
             self.reset_exit_nodes()
+
+    def request(
+        self,
+        url: str,
+        method: str = "GET",
+        timeout: Optional[float] = None,
+        **kwargs,
+    ):
+        """
+        Make an HTTP request through the Tor SOCKS proxy.
+
+        Args:
+            url: Target URL.
+            method: HTTP method (default: "GET").
+            timeout: Request timeout (default: ``IP_CHECK_TIMEOUT``).
+            **kwargs: Passed through to ``requests``.
+
+        Returns:
+            The ``requests.Response``.
+        """
+        session = self._session or self._create_session()
+        try:
+            return session.request(
+                method, url, timeout=timeout or self.IP_CHECK_TIMEOUT, **kwargs
+            )
+        finally:
+            if not self._session:
+                session.close()
+
+    def request_with_retry(
+        self,
+        url: str,
+        method: str = "GET",
+        max_rotations: int = 3,
+        markers=None,
+        statuses=None,
+        timeout: Optional[float] = None,
+        **kwargs,
+    ):
+        """
+        Request ``url``, rotating to a fresh exit when the response looks blocked.
+
+        Detects Cloudflare/CAPTCHA challenges and block statuses (see
+        :func:`tor_session_manager.blocking.detect_block`); on a block it rotates
+        and retries, up to ``max_rotations`` times.
+
+        Args:
+            url: Target URL.
+            method: HTTP method (default: "GET").
+            max_rotations: Maximum exit rotations to attempt (default: 3).
+            markers: Override challenge body markers.
+            statuses: Override block HTTP statuses.
+            timeout: Request timeout.
+            **kwargs: Passed through to ``requests``.
+
+        Returns:
+            The first non-blocked ``requests.Response``.
+
+        Raises:
+            BlockedResponseError: If still blocked after ``max_rotations``.
+        """
+        reason = None
+        response = None
+        for attempt in range(max_rotations + 1):
+            response = self.request(url, method=method, timeout=timeout, **kwargs)
+            reason = detect_block(response, markers=markers, statuses=statuses)
+            if reason is None:
+                return response
+            if attempt < max_rotations:
+                logger.info(
+                    "Response blocked (%s); rotating exit and retrying", reason
+                )
+                self.rotate()
+
+        raise BlockedResponseError(
+            f"Still blocked after {max_rotations} rotation(s): {reason}",
+            reason=reason,
+            response=response,
+        )
+
+    def is_exit_blocklisted(self, url: str) -> Optional[str]:
+        """
+        Check whether the current exit appears blocked when fetching ``url``.
+
+        Args:
+            url: A URL to probe.
+
+        Returns:
+            The block reason string, or None if the response does not look
+            blocked.
+        """
+        return detect_block(self.request(url))
 
     def circuit_pool(self, size: int = 3):
         """
