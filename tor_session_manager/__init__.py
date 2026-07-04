@@ -14,8 +14,9 @@ from .exceptions import (
     TorNotReadyError,
     TorSessionError,
 )
+from .quality import CircuitHealth
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 __author__ = "Pablo Alaniz"
 __email__ = "pablo@culturainteractiva.com"
 
@@ -24,6 +25,7 @@ __all__ = [
     "rotate_and_get_ip",
     "CircuitInfo",
     "RelayInfo",
+    "CircuitHealth",
     "TorSessionError",
     "TorConnectionError",
     "TorNotReadyError",

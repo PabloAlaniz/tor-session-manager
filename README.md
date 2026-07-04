@@ -140,6 +140,9 @@ TorClient(
 | `list_circuits()` | Listar todos los circuitos Tor activos (`CircuitInfo`) |
 | `get_circuit_info(circuit_id=None)` | Detalle de un circuito, o del circuito activo (BUILT/GENERAL más reciente) |
 | `get_exit_country(circuit_id=None)` | Código de país ISO del nodo de salida del circuito |
+| `measure_latency(url=None, samples=3)` | Latencia (ms, mediana de N muestras) del circuito actual |
+| `measure_throughput(url=None)` | Ancho de banda de descarga (KB/s) del circuito actual |
+| `benchmark(...)` | Combina latencia + throughput en un `CircuitHealth` |
 | `proxies` | Propiedad que devuelve dict de proxy para requests |
 
 > 💡 **Rotación verificada:** `rotate()` a veces reutiliza el mismo nodo de salida, así que la IP puede
@@ -180,6 +183,29 @@ with TorClient() as client:
 `created`, y las propiedades `exit_relay` y `exit_country`. `RelayInfo` tiene `fingerprint`,
 `nickname`, `address` y `country`. La resolución de IP/país del exit es best-effort: si el GeoIP
 o la consulta al consenso fallan, esos campos quedan en `None` sin romper la llamada.
+
+### Medición de calidad del circuito
+
+Podés medir qué tan bueno es el circuito actual (latencia y ancho de banda, a nivel aplicación a
+través de Tor) para decidir si conviene rotar:
+
+```python
+with TorClient() as client:
+    health = client.benchmark()
+    print(f"Latencia: {health.latency_ms:.0f} ms")
+    print(f"Throughput: {health.throughput_kbps:.0f} KB/s")
+
+    # O medir por separado
+    print(f"Latencia: {client.measure_latency(samples=5):.0f} ms")
+
+    # Rotar si el circuito está lento
+    if health.latency_ms and health.latency_ms > 2000:
+        client.rotate()
+```
+
+`benchmark()` es best-effort: si una métrica falla (p. ej. cae el endpoint de throughput), ese campo
+queda en `None` y la otra se reporta igual. `CircuitHealth` expone `latency_ms`, `throughput_kbps`,
+`samples`, `measured_at` (epoch) y la propiedad `ok` (True si al menos una métrica se resolvió).
 
 **Context Managers:**
 

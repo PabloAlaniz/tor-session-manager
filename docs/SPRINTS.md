@@ -44,10 +44,10 @@ IP checkers con fallback, rotación verificable y reintentos.
 - `get_exit_country()` (GeoIP de stem).
 - `list_circuits()`. Dataclasses `CircuitInfo` y `RelayInfo` en `circuits.py`.
 
-### Sprint 3 — Medición de calidad de circuito ⚡
-- `measure_latency()` (RTT) y `measure_throughput()` (descarga de muestra por el circuito).
-- Dataclass `CircuitHealth` (latencia, ancho de banda estimado, timestamp).
-- `benchmark()` que combina ambas mediciones.
+### Sprint 3 — Medición de calidad de circuito ⚡ ✅ (v1.3.0)
+- `measure_latency()` (mediana de N muestras) y `measure_throughput()` (KB/s) por el circuito.
+- Dataclass `CircuitHealth` (latencia, throughput, samples, timestamp, `.ok`) en `quality.py`.
+- `benchmark()` que combina ambas mediciones de forma tolerante a fallos.
 
 ### Sprint 4 — Selección de nodo de salida por país / a demanda 🛡️⚡
 - `new_circuit(exit_country=None, exit_fingerprint=None)` con stem.
@@ -103,4 +103,5 @@ IP checkers con fallback, rotación verificable y reintentos.
 
 - **Sprint 1**: ✅ implementado en v1.1.0.
 - **Sprint 2**: ✅ implementado en v1.2.0.
-- **Sprints 3–10**: planificados.
+- **Sprint 3**: ✅ implementado en v1.3.0.
+- **Sprints 4–10**: planificados.

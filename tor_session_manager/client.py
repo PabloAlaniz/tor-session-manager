@@ -20,6 +20,7 @@ from .exceptions import (
     TorSessionError,
 )
 from .ip_checkers import fetch_ip_with_fallback
+from .quality import CircuitHealth, measure_latency, measure_throughput
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,9 @@ class TorClient:
     IP_CHECK_TIMEOUT = 30
     CIRCUIT_STATUS_BUILT = "BUILT"
     CIRCUIT_PURPOSE_GENERAL = "GENERAL"
+    DEFAULT_LATENCY_URL = "https://httpbin.org/get"
+    DEFAULT_THROUGHPUT_URL = "https://httpbin.org/bytes/102400"
+    DEFAULT_MEASURE_TIMEOUT = 30
     
     def __init__(
         self,
@@ -348,6 +352,102 @@ class TorClient:
             TorConnectionError: If unable to connect to the Tor controller.
         """
         return self.get_circuit_info(circuit_id).exit_country
+
+    def measure_latency(
+        self,
+        url: Optional[str] = None,
+        samples: int = 3,
+        timeout: Optional[float] = None,
+    ) -> float:
+        """
+        Measure request latency of the current circuit (median of N samples).
+
+        Args:
+            url: Endpoint to time (default: ``DEFAULT_LATENCY_URL``).
+            samples: Number of timed requests (default: 3).
+            timeout: Per-request timeout (default: ``DEFAULT_MEASURE_TIMEOUT``).
+
+        Returns:
+            Median round-trip latency in milliseconds.
+        """
+        session = self._session or self._create_session()
+        try:
+            return measure_latency(
+                session,
+                url or self.DEFAULT_LATENCY_URL,
+                timeout or self.DEFAULT_MEASURE_TIMEOUT,
+                samples=samples,
+            )
+        finally:
+            if not self._session:
+                session.close()
+
+    def measure_throughput(
+        self,
+        url: Optional[str] = None,
+        timeout: Optional[float] = None,
+    ) -> float:
+        """
+        Measure download throughput of the current circuit in KB/s.
+
+        Args:
+            url: Endpoint returning a sizeable body
+                (default: ``DEFAULT_THROUGHPUT_URL``).
+            timeout: Request timeout (default: ``DEFAULT_MEASURE_TIMEOUT``).
+
+        Returns:
+            Download throughput in kilobytes per second.
+        """
+        session = self._session or self._create_session()
+        try:
+            return measure_throughput(
+                session,
+                url or self.DEFAULT_THROUGHPUT_URL,
+                timeout or self.DEFAULT_MEASURE_TIMEOUT,
+            )
+        finally:
+            if not self._session:
+                session.close()
+
+    def benchmark(
+        self,
+        latency_url: Optional[str] = None,
+        throughput_url: Optional[str] = None,
+        samples: int = 3,
+    ) -> CircuitHealth:
+        """
+        Benchmark the current circuit's latency and throughput.
+
+        Both measurements are best-effort: if one fails, its field is left
+        None and the other is still reported.
+
+        Args:
+            latency_url: Override for the latency endpoint.
+            throughput_url: Override for the throughput endpoint.
+            samples: Number of latency samples (default: 3).
+
+        Returns:
+            A :class:`CircuitHealth` snapshot with ``measured_at`` set.
+        """
+        latency_ms: Optional[float] = None
+        throughput_kbps: Optional[float] = None
+
+        try:
+            latency_ms = self.measure_latency(url=latency_url, samples=samples)
+        except Exception as e:  # noqa: BLE001 - best-effort measurement
+            logger.debug("Latency measurement failed: %s", e)
+
+        try:
+            throughput_kbps = self.measure_throughput(url=throughput_url)
+        except Exception as e:  # noqa: BLE001 - best-effort measurement
+            logger.debug("Throughput measurement failed: %s", e)
+
+        return CircuitHealth(
+            latency_ms=latency_ms,
+            throughput_kbps=throughput_kbps,
+            samples=samples,
+            measured_at=time.time(),
+        )
 
     @property
     def proxies(self) -> dict:
