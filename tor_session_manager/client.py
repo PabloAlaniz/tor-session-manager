@@ -13,6 +13,7 @@ import requests
 from stem import Signal
 from stem.control import Controller
 
+from .circuits import CircuitInfo, parse_circuit
 from .exceptions import (
     TorConnectionError,
     TorNotReadyError,
@@ -80,6 +81,8 @@ class TorClient:
     DEFAULT_ROTATE_DELAY = 2.0
     IP_CHECK_URL = "https://api.ipify.org/?format=json"
     IP_CHECK_TIMEOUT = 30
+    CIRCUIT_STATUS_BUILT = "BUILT"
+    CIRCUIT_PURPOSE_GENERAL = "GENERAL"
     
     def __init__(
         self,
@@ -274,14 +277,86 @@ class TorClient:
         finally:
             pass  # Circuit will be reused until next rotation
     
+    def list_circuits(self) -> list:
+        """
+        List all Tor circuits currently known to the controller.
+
+        Returns:
+            A list of :class:`CircuitInfo` snapshots.
+
+        Raises:
+            TorConnectionError: If unable to connect to the Tor controller.
+        """
+        with self._get_controller() as controller:
+            return [
+                parse_circuit(controller, circuit)
+                for circuit in controller.get_circuits()
+            ]
+
+    def get_circuit_info(self, circuit_id: Optional[str] = None) -> CircuitInfo:
+        """
+        Get details for a specific circuit, or the active one.
+
+        When ``circuit_id`` is None, the "active" circuit is chosen: the most
+        recently created circuit that is BUILT and of GENERAL purpose (the kind
+        used to carry regular application traffic).
+
+        Args:
+            circuit_id: The circuit id to inspect, or None for the active one.
+
+        Returns:
+            A :class:`CircuitInfo` snapshot.
+
+        Raises:
+            TorSessionError: If the circuit id is not found, or no active
+                circuit exists.
+            TorConnectionError: If unable to connect to the Tor controller.
+        """
+        circuits = self.list_circuits()
+
+        if circuit_id is not None:
+            for circuit in circuits:
+                if circuit.id == circuit_id:
+                    return circuit
+            raise TorSessionError(f"Circuit '{circuit_id}' not found")
+
+        candidates = [
+            c
+            for c in circuits
+            if c.status == self.CIRCUIT_STATUS_BUILT
+            and c.purpose == self.CIRCUIT_PURPOSE_GENERAL
+        ]
+        if not candidates:
+            raise TorSessionError("No active (BUILT/GENERAL) circuit found")
+
+        # Most recently created wins; fall back to id order if 'created' is None.
+        candidates.sort(key=lambda c: (c.created or "", c.id))
+        return candidates[-1]
+
+    def get_exit_country(self, circuit_id: Optional[str] = None) -> Optional[str]:
+        """
+        Get the ISO country code of a circuit's exit relay.
+
+        Args:
+            circuit_id: The circuit to inspect, or None for the active one.
+
+        Returns:
+            The exit relay's country code, or None if it cannot be resolved.
+
+        Raises:
+            TorSessionError: If no matching/active circuit exists.
+            TorConnectionError: If unable to connect to the Tor controller.
+        """
+        return self.get_circuit_info(circuit_id).exit_country
+
     @property
     def proxies(self) -> dict:
         """
         Get proxy configuration dict for use with requests.
-        
+
         Returns:
             Dict with http and https proxy URLs.
-        
+
         Example:
             >>> client = TorClient()
             >>> requests.get(url, proxies=client.proxies)

@@ -39,10 +39,10 @@ IP checkers con fallback, rotación verificable y reintentos.
 - Helper `_retry_with_backoff()` (backoff exponencial) reutilizable.
 - Excepción `AllIPCheckersFailedError`.
 
-### Sprint 2 — Introspección de circuitos ⚡🛡️
+### Sprint 2 — Introspección de circuitos ⚡🛡️ ✅ (v1.2.0)
 - `get_circuit_info()` → circuito activo, fingerprints de los relays, nickname/IP del exit.
 - `get_exit_country()` (GeoIP de stem).
-- `list_circuits()`. Dataclass `CircuitInfo`.
+- `list_circuits()`. Dataclasses `CircuitInfo` y `RelayInfo` en `circuits.py`.
 
 ### Sprint 3 — Medición de calidad de circuito ⚡
 - `measure_latency()` (RTT) y `measure_throughput()` (descarga de muestra por el circuito).
@@ -102,4 +102,5 @@ IP checkers con fallback, rotación verificable y reintentos.
 ## Estado
 
 - **Sprint 1**: ✅ implementado en v1.1.0.
-- **Sprints 2–10**: planificados.
+- **Sprint 2**: ✅ implementado en v1.2.0.
+- **Sprints 3–10**: planificados.

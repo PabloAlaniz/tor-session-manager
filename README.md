@@ -137,6 +137,9 @@ TorClient(
 | `rotate()` | Solicitar nuevo circuito (nueva IP de salida) |
 | `get_ip()` | Obtener IP pública actual a través de Tor (con fallback entre varios servicios) |
 | `wait_for_new_ip(previous_ip=None, max_attempts=5)` | Rotar hasta que la IP de salida realmente cambie |
+| `list_circuits()` | Listar todos los circuitos Tor activos (`CircuitInfo`) |
+| `get_circuit_info(circuit_id=None)` | Detalle de un circuito, o del circuito activo (BUILT/GENERAL más reciente) |
+| `get_exit_country(circuit_id=None)` | Código de país ISO del nodo de salida del circuito |
 | `proxies` | Propiedad que devuelve dict de proxy para requests |
 
 > 💡 **Rotación verificada:** `rotate()` a veces reutiliza el mismo nodo de salida, así que la IP puede
@@ -153,6 +156,30 @@ with TorClient() as client:
 > 🔁 **IP checkers con fallback:** `get_ip()` prueba varios servicios en orden
 > (ipify, ifconfig.me, icanhazip, httpbin), de modo que la caída de uno solo no rompe la resolución
 > de IP. Si todos fallan levanta `AllIPCheckersFailedError`.
+
+### Inspección de circuitos
+
+Podés ver qué relays componen tus circuitos y por qué país salís:
+
+```python
+with TorClient() as client:
+    info = client.get_circuit_info()  # circuito activo (BUILT/GENERAL más reciente)
+    print(f"Circuito {info.id} · estado {info.status}")
+    for hop in info.path:
+        print(f"  {hop.nickname or hop.fingerprint} ({hop.country or '??'})")
+
+    exit_relay = info.exit_relay
+    print(f"Salida: {exit_relay.address} en {info.exit_country}")
+
+    # También podés listar todos los circuitos o consultar solo el país de salida
+    print(f"Circuitos activos: {len(client.list_circuits())}")
+    print(f"País de salida: {client.get_exit_country()}")
+```
+
+`CircuitInfo` expone `id`, `status`, `purpose`, `path` (lista de `RelayInfo`), `build_flags`,
+`created`, y las propiedades `exit_relay` y `exit_country`. `RelayInfo` tiene `fingerprint`,
+`nickname`, `address` y `country`. La resolución de IP/país del exit es best-effort: si el GeoIP
+o la consulta al consenso fallan, esos campos quedan en `None` sin romper la llamada.
 
 **Context Managers:**
 
