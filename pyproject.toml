@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tor-session-manager"
-version = "1.6.0"
+version = "1.7.0"
 description = "A lightweight Python library for managing Tor sessions and rotating circuits"
 readme = "README.md"
 license = {text = "MIT"}
@@ -49,6 +49,10 @@ Repository = "https://github.com/PabloAlaniz/tor-session-manager"
 Issues = "https://github.com/PabloAlaniz/tor-session-manager/issues"
 
 [project.optional-dependencies]
+async = [
+    "aiohttp>=3.8",
+    "aiohttp_socks>=0.8",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",

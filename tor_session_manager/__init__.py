@@ -19,7 +19,23 @@ from .exceptions import (
 from .pool import CircuitPool, PooledCircuit
 from .quality import CircuitHealth
 
-__version__ = "1.6.0"
+try:
+    from .aio import AsyncResponse, TorClientAsync
+except ImportError:
+    # The async client requires the optional [async] extra (aiohttp,
+    # aiohttp_socks). Expose a helpful placeholder instead of failing import.
+    _ASYNC_IMPORT_HINT = (
+        "TorClientAsync requires the optional async extra. "
+        "Install it with: pip install tor-session-manager[async]"
+    )
+
+    class TorClientAsync:  # type: ignore[no-redef]
+        def __init__(self, *args, **kwargs):
+            raise ImportError(_ASYNC_IMPORT_HINT)
+
+    AsyncResponse = None  # type: ignore[assignment,misc]
+
+__version__ = "1.7.0"
 __author__ = "Pablo Alaniz"
 __email__ = "pablo@culturainteractiva.com"
 
@@ -31,6 +47,8 @@ __all__ = [
     "CircuitHealth",
     "CircuitPool",
     "PooledCircuit",
+    "TorClientAsync",
+    "AsyncResponse",
     "detect_block",
     "TorSessionError",
     "TorConnectionError",

@@ -64,10 +64,11 @@ IP checkers con fallback, rotación verificable y reintentos.
 - `TorClient.request()`, `request_with_retry()` (rota ante bloqueo) e `is_exit_blocklisted()`.
 - `BlockedResponseError` (con `.reason`/`.response`).
 
-### Sprint 7 — Soporte async (`TorClientAsync`) ⚡
-- `TorClientAsync` con `aiohttp` + SOCKS async; rotate/get_ip/benchmark async.
-- Pool de circuitos concurrente para scraping paralelo.
-- Dependencia opcional `[async]` en `pyproject.toml`.
+### Sprint 7 — Soporte async (`TorClientAsync`) ⚡ ✅ (v1.7.0)
+- `aio.py`: `TorClientAsync` con `aiohttp` + `aiohttp_socks`; get_ip/request/request_with_retry/
+  benchmark async, control-plane vía `asyncio.to_thread`, `AsyncResponse` (reusa `detect_block`).
+- `gather_requests()`: fetch concurrente acotado por semáforo (scraping paralelo).
+- Dependencia opcional `[async]` en `pyproject.toml`; import guardado en `__init__`.
 
 ### Sprint 8 — Censura: bridges + pluggable transports 🛡️
 - Configuración de bridges y transports: obfs4, snowflake, meek.
@@ -109,4 +110,5 @@ IP checkers con fallback, rotación verificable y reintentos.
 - **Sprint 4**: ✅ implementado en v1.4.0.
 - **Sprint 5**: ✅ implementado en v1.5.0.
 - **Sprint 6**: ✅ implementado en v1.6.0.
-- **Sprints 7–10**: planificados.
+- **Sprint 7**: ✅ implementado en v1.7.0.
+- **Sprints 8–10**: planificados.

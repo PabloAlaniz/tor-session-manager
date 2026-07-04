@@ -300,6 +300,39 @@ response = client.request_with_retry(
 Cuando se agotan las rotaciones sin éxito, levanta `BlockedResponseError` (con `.reason` y
 `.response` para inspeccionar el último intento).
 
+### Async / scraping concurrente
+
+Para scraping paralelo hay un cliente async, `TorClientAsync` (sobre `aiohttp`). Instalá el extra:
+
+```bash
+pip install tor-session-manager[async]
+```
+
+```python
+import asyncio
+from tor_session_manager import TorClientAsync
+
+async def main():
+    async with TorClientAsync(max_concurrency=10) as client:
+        print(await client.get_ip())
+
+        # Descargar muchas URLs concurrentemente (acotado por max_concurrency)
+        urls = ["https://httpbin.org/get"] * 50
+        responses = await client.gather_requests(urls)
+        ok = [r for r in responses if r is not None]
+        print(f"{len(ok)}/{len(urls)} OK")
+
+        # También async: rotate(), request_with_retry(), benchmark(),
+        # set_exit_country(), new_circuit()
+        await client.rotate()
+
+asyncio.run(main())
+```
+
+El control-plane (rotate, selección de exit) usa `stem` por debajo vía `asyncio.to_thread`; el
+data-plane (requests, medición) va por `aiohttp` con `aiohttp_socks` (DNS ruteado por Tor). Cada URL
+que falla en `gather_requests` queda como `None` en su posición, sin cortar el lote.
+
 **Context Managers:**
 
 ```python
