@@ -6,11 +6,13 @@ designed for ethical web scraping, security research, and privacy testing.
 """
 
 from .blocking import detect_block
+from .bridges import Bridge, build_bridge_config, launch_bridged_tor, parse_bridge_line
 from .circuits import CircuitInfo, RelayInfo
 from .client import TorClient, rotate_and_get_ip
 from .exceptions import (
     AllIPCheckersFailedError,
     BlockedResponseError,
+    BridgeConfigError,
     IPFetchError,
     TorConnectionError,
     TorNotReadyError,
@@ -35,7 +37,7 @@ except ImportError:
 
     AsyncResponse = None  # type: ignore[assignment,misc]
 
-__version__ = "1.7.0"
+__version__ = "1.8.0"
 __author__ = "Pablo Alaniz"
 __email__ = "pablo@culturainteractiva.com"
 
@@ -50,10 +52,15 @@ __all__ = [
     "TorClientAsync",
     "AsyncResponse",
     "detect_block",
+    "Bridge",
+    "parse_bridge_line",
+    "build_bridge_config",
+    "launch_bridged_tor",
     "TorSessionError",
     "TorConnectionError",
     "TorNotReadyError",
     "IPFetchError",
     "AllIPCheckersFailedError",
     "BlockedResponseError",
+    "BridgeConfigError",
 ]

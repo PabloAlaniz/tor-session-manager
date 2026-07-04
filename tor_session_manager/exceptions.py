@@ -35,3 +35,8 @@ class BlockedResponseError(TorSessionError):
         super().__init__(message)
         self.reason = reason
         self.response = response
+
+
+class BridgeConfigError(TorSessionError):
+    """Raised for an invalid bridge line or a missing pluggable transport."""
+    pass

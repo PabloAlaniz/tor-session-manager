@@ -70,11 +70,11 @@ IP checkers con fallback, rotación verificable y reintentos.
 - `gather_requests()`: fetch concurrente acotado por semáforo (scraping paralelo).
 - Dependencia opcional `[async]` en `pyproject.toml`; import guardado en `__init__`.
 
-### Sprint 8 — Censura: bridges + pluggable transports 🛡️
-- Configuración de bridges y transports: obfs4, snowflake, meek.
-- Lanzar un Tor propio con `stem.process.launch_tor_with_config` (Bridge + ClientTransportPlugin),
-  además de configurar un Tor existente.
-- `BridgeConfig` / validación de disponibilidad del binario del transport.
+### Sprint 8 — Censura: bridges + pluggable transports 🛡️ ✅ (v1.8.0)
+- `bridges.py`: `Bridge` + `parse_bridge_line()`, `transport_binary()`, `build_bridge_config()`
+  (obfs4/snowflake/meek/webtunnel) y `launch_bridged_tor()` (Tor gestionado con Bridge +
+  ClientTransportPlugin).
+- `BridgeConfigError` (bridge line inválida / binario PT faltante).
 
 ### Sprint 9 — Fingerprint de request + pacing adaptativo 🛡️⚡
 - Rotación de User-Agent / perfiles de headers coherentes.
@@ -111,4 +111,5 @@ IP checkers con fallback, rotación verificable y reintentos.
 - **Sprint 5**: ✅ implementado en v1.5.0.
 - **Sprint 6**: ✅ implementado en v1.6.0.
 - **Sprint 7**: ✅ implementado en v1.7.0.
-- **Sprints 8–10**: planificados.
+- **Sprint 8**: ✅ implementado en v1.8.0.
+- **Sprints 9–10**: planificados.

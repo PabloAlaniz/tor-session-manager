@@ -333,6 +333,41 @@ El control-plane (rotate, selección de exit) usa `stem` por debajo vía `asynci
 data-plane (requests, medición) va por `aiohttp` con `aiohttp_socks` (DNS ruteado por Tor). Cada URL
 que falla en `gather_requests` queda como `None` en su posición, sin cortar el lote.
 
+### Bridges y pluggable transports (bajo censura)
+
+Cuando el ISP o el país bloquean Tor *mismo*, los relays normales son inalcanzables. Con **bridges**
+(relays no listados) y **pluggable transports** (obfs4, snowflake, meek, webtunnel) el tráfico se
+ofusca para no parecer Tor. La librería lanza un Tor gestionado con esa config:
+
+```python
+from tor_session_manager import launch_bridged_tor, TorClient
+
+# Las bridge lines las obtenés de https://bridges.torproject.org o Telegram @GetBridgesBot
+proc = launch_bridged_tor(
+    bridges=[
+        "obfs4 192.0.2.1:443 0123...CDEF cert=... iat-mode=0",
+        "obfs4 192.0.2.2:443 89AB...4567 cert=... iat-mode=0",
+    ],
+    socks_port=9050,
+    control_port=9051,
+)
+
+# Ahora usás el TorClient normal contra esos puertos
+with TorClient(control_port=9051, socks_port=9050) as client:
+    print(client.get_ip())
+
+proc.terminate()  # cerrar el Tor gestionado al terminar
+```
+
+> ⚠️ **Binarios de los transports:** `obfs4proxy`, `snowflake-client`, etc. **no** vienen con la
+> librería — tienen que estar instalados y en el `PATH` (o pasás la ruta con
+> `transport_paths={"obfs4": "/ruta/obfs4proxy"}`). Si falta el binario, se levanta `BridgeConfigError`
+> con un mensaje claro.
+
+`UseBridges`/`Bridge`/`ClientTransportPlugin` son opciones de *arranque* de Tor (no se pueden encender
+en un Tor ya corriendo), por eso el flujo soportado es lanzar un Tor propio. También podés usar
+`parse_bridge_line()` y `build_bridge_config()` por separado si querés armar tu propio `torrc`.
+
 **Context Managers:**
 
 ```python
@@ -356,6 +391,7 @@ with client.rotated_session():
 | `IPFetchError` | No se puede determinar la IP pública |
 | `AllIPCheckersFailedError` | Fallaron todos los servicios de checkeo de IP (subclase de `IPFetchError`) |
 | `BlockedResponseError` | La respuesta siguió bloqueada tras agotar las rotaciones de exit |
+| `BridgeConfigError` | Bridge line inválida o binario de pluggable transport faltante |
 
 ## ⚙️ Cómo Funciona
 
