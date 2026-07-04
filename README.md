@@ -143,6 +143,11 @@ TorClient(
 | `measure_latency(url=None, samples=3)` | Latencia (ms, mediana de N muestras) del circuito actual |
 | `measure_throughput(url=None)` | Ancho de banda de descarga (KB/s) del circuito actual |
 | `benchmark(...)` | Combina latencia + throughput en un `CircuitHealth` |
+| `set_exit_country(country, strict=True)` | Forzar el país del nodo de salida |
+| `set_exit_nodes(countries=None, fingerprints=None, strict=True)` | Restringir exits por país y/o fingerprint |
+| `reset_exit_nodes()` | Limpiar cualquier restricción de exit |
+| `new_circuit(exit_country=None, exit_fingerprint=None, ...)` | Construir circuito nuevo con el exit elegido |
+| `pinned_exit(...)` | Context manager: fija el exit y lo limpia al salir |
 | `proxies` | Propiedad que devuelve dict de proxy para requests |
 
 > 💡 **Rotación verificada:** `rotate()` a veces reutiliza el mismo nodo de salida, así que la IP puede
@@ -206,6 +211,31 @@ with TorClient() as client:
 `benchmark()` es best-effort: si una métrica falla (p. ej. cae el endpoint de throughput), ese campo
 queda en `None` y la otra se reporta igual. `CircuitHealth` expone `latency_ms`, `throughput_kbps`,
 `samples`, `measured_at` (epoch) y la propiedad `ok` (True si al menos una métrica se resolvió).
+
+### Elegir el nodo de salida (país / a demanda)
+
+Podés forzar por qué país —o por qué relay— salís, útil para esquivar bloqueos del destino que
+prohíben ciertas IPs de salida:
+
+```python
+with TorClient() as client:
+    # Salir por un país específico y confirmar que el circuito funciona
+    nueva_ip = client.new_circuit(exit_country="de")
+    print(f"Saliendo por Alemania: {nueva_ip} ({client.get_exit_country()})")
+
+    # Pinear el exit solo para un bloque; se limpia automáticamente al salir
+    with client.pinned_exit(countries=["nl"]):
+        requests.get(url, proxies=client.proxies)  # sale por Países Bajos
+
+    # Limpiar cualquier restricción manualmente
+    client.reset_exit_nodes()
+```
+
+> ⚠️ **StrictNodes y países sin exits:** con `strict=True` (por defecto) Tor usa *solo* exits que
+> cumplan la restricción. Si el país no tiene exits usables, no puede armar circuito;
+> `new_circuit(verify=True)` (default) lo detecta y levanta `TorSessionError` con un mensaje claro en
+> vez de colgarse. La restricción persiste a nivel del proceso Tor hasta que la limpiás con
+> `reset_exit_nodes()` (o usás `pinned_exit`, que lo hace por vos).
 
 **Context Managers:**
 

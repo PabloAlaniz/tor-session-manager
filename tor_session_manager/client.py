@@ -15,10 +15,12 @@ from stem.control import Controller
 
 from .circuits import CircuitInfo, parse_circuit
 from .exceptions import (
+    IPFetchError,
     TorConnectionError,
     TorNotReadyError,
     TorSessionError,
 )
+from .exits import format_exit_nodes
 from .ip_checkers import fetch_ip_with_fallback
 from .quality import CircuitHealth, measure_latency, measure_throughput
 
@@ -448,6 +450,132 @@ class TorClient:
             samples=samples,
             measured_at=time.time(),
         )
+
+    def set_exit_nodes(
+        self,
+        countries: Optional[list] = None,
+        fingerprints: Optional[list] = None,
+        strict: bool = True,
+    ) -> None:
+        """
+        Constrain which exit nodes Tor may use for new circuits.
+
+        The constraint is applied to the running Tor process and persists for
+        subsequent circuits until cleared with :meth:`reset_exit_nodes`. Call
+        :meth:`rotate` (or :meth:`new_circuit`) afterwards to build a circuit
+        that honours it.
+
+        Args:
+            countries: ISO country codes (each becomes ``{cc}``).
+            fingerprints: Relay fingerprints (each becomes ``$FINGERPRINT``).
+            strict: If True (default), Tor uses *only* matching exits
+                (StrictNodes=1); if False, it prefers them but may fall back.
+
+        Raises:
+            ValueError: If neither countries nor fingerprints are given.
+            TorConnectionError: If unable to connect to the Tor controller.
+        """
+        exit_nodes = format_exit_nodes(countries=countries, fingerprints=fingerprints)
+        with self._get_controller() as controller:
+            controller.set_conf("ExitNodes", exit_nodes)
+            controller.set_conf("StrictNodes", "1" if strict else "0")
+        logger.info("Exit nodes constrained to: %s (strict=%s)", exit_nodes, strict)
+
+    def reset_exit_nodes(self) -> None:
+        """
+        Clear any exit-node constraint set by :meth:`set_exit_nodes`.
+
+        Raises:
+            TorConnectionError: If unable to connect to the Tor controller.
+        """
+        with self._get_controller() as controller:
+            controller.reset_conf("ExitNodes", "StrictNodes")
+        logger.info("Exit node constraint cleared")
+
+    def set_exit_country(self, country: str, strict: bool = True) -> None:
+        """
+        Constrain exits to a single country (convenience over set_exit_nodes).
+
+        Args:
+            country: ISO 2-letter country code (e.g. "us").
+            strict: See :meth:`set_exit_nodes`.
+        """
+        self.set_exit_nodes(countries=[country], strict=strict)
+
+    def new_circuit(
+        self,
+        exit_country: Optional[str] = None,
+        exit_fingerprint: Optional[str] = None,
+        strict: bool = True,
+        verify: bool = True,
+    ) -> Optional[str]:
+        """
+        Build a fresh circuit, optionally through a chosen exit.
+
+        Args:
+            exit_country: If given, constrain the exit to this country.
+            exit_fingerprint: If given, constrain the exit to this relay.
+            strict: See :meth:`set_exit_nodes`.
+            verify: If True (default), confirm a working circuit exists by
+                fetching the public IP; raises if it cannot (e.g. the country
+                has no usable exit nodes under StrictNodes).
+
+        Returns:
+            The new public IP if ``verify`` is True, else None.
+
+        Raises:
+            TorSessionError: If ``verify`` is True and no working circuit could
+                be established with the requested constraints.
+        """
+        if exit_country or exit_fingerprint:
+            self.set_exit_nodes(
+                countries=[exit_country] if exit_country else None,
+                fingerprints=[exit_fingerprint] if exit_fingerprint else None,
+                strict=strict,
+            )
+
+        self.rotate()
+
+        if not verify:
+            return None
+
+        try:
+            return self.get_ip()
+        except IPFetchError as e:
+            raise TorSessionError(
+                "Could not establish a working circuit with the requested exit "
+                "constraints (the country may have no usable exit nodes): %s" % e
+            )
+
+    @contextmanager
+    def pinned_exit(
+        self,
+        countries: Optional[list] = None,
+        fingerprints: Optional[list] = None,
+        strict: bool = True,
+    ):
+        """
+        Context manager that pins the exit for its duration, then clears it.
+
+        Applies the constraint, rotates to a matching circuit, yields, and
+        always resets the exit constraint on exit — so it never leaks past the
+        block.
+
+        Example:
+            >>> with client.pinned_exit(countries=["de"]):
+            ...     requests.get(url, proxies=client.proxies)  # exits via DE
+
+        Yields:
+            The TorClient instance with a pinned exit.
+        """
+        self.set_exit_nodes(
+            countries=countries, fingerprints=fingerprints, strict=strict
+        )
+        try:
+            self.rotate()
+            yield self
+        finally:
+            self.reset_exit_nodes()
 
     @property
     def proxies(self) -> dict:

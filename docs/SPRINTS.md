@@ -49,9 +49,10 @@ IP checkers con fallback, rotación verificable y reintentos.
 - Dataclass `CircuitHealth` (latencia, throughput, samples, timestamp, `.ok`) en `quality.py`.
 - `benchmark()` que combina ambas mediciones de forma tolerante a fallos.
 
-### Sprint 4 — Selección de nodo de salida por país / a demanda 🛡️⚡
-- `new_circuit(exit_country=None, exit_fingerprint=None)` con stem.
-- `set_exit_country("us")`. Manejo de `StrictNodes` (país sin exits → error claro).
+### Sprint 4 — Selección de nodo de salida por país / a demanda 🛡️⚡ ✅ (v1.4.0)
+- `new_circuit(exit_country=None, exit_fingerprint=None, verify=True)` vía `ExitNodes`/`StrictNodes`.
+- `set_exit_country("us")`, `set_exit_nodes()`, `reset_exit_nodes()`, contextmanager `pinned_exit()`.
+- Helpers puros en `exits.py`. Manejo de `StrictNodes` (país sin exits → `TorSessionError` claro).
 
 ### Sprint 5 — Pool de circuitos + "best circuit" ⚡
 - `CircuitPool`: construye N circuitos, los benchmarkea, fija (pin) el más rápido.
@@ -104,4 +105,5 @@ IP checkers con fallback, rotación verificable y reintentos.
 - **Sprint 1**: ✅ implementado en v1.1.0.
 - **Sprint 2**: ✅ implementado en v1.2.0.
 - **Sprint 3**: ✅ implementado en v1.3.0.
-- **Sprints 4–10**: planificados.
+- **Sprint 4**: ✅ implementado en v1.4.0.
+- **Sprints 5–10**: planificados.

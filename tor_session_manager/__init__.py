@@ -16,7 +16,7 @@ from .exceptions import (
 )
 from .quality import CircuitHealth
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 __author__ = "Pablo Alaniz"
 __email__ = "pablo@culturainteractiva.com"
 
