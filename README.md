@@ -135,8 +135,24 @@ TorClient(
 |--------|-------------|
 | `is_ready()` | Verificar si Tor está corriendo y bootstrapped |
 | `rotate()` | Solicitar nuevo circuito (nueva IP de salida) |
-| `get_ip()` | Obtener IP pública actual a través de Tor |
+| `get_ip()` | Obtener IP pública actual a través de Tor (con fallback entre varios servicios) |
+| `wait_for_new_ip(previous_ip=None, max_attempts=5)` | Rotar hasta que la IP de salida realmente cambie |
 | `proxies` | Propiedad que devuelve dict de proxy para requests |
+
+> 💡 **Rotación verificada:** `rotate()` a veces reutiliza el mismo nodo de salida, así que la IP puede
+> no cambiar. `wait_for_new_ip()` rota repetidamente hasta observar una IP distinta (o agotar
+> `max_attempts`), útil cuando necesitás garantizar un exit nuevo entre requests.
+
+```python
+with TorClient() as client:
+    ip_vieja = client.get_ip()
+    ip_nueva = client.wait_for_new_ip(previous_ip=ip_vieja)
+    print(f"{ip_vieja} -> {ip_nueva}")
+```
+
+> 🔁 **IP checkers con fallback:** `get_ip()` prueba varios servicios en orden
+> (ipify, ifconfig.me, icanhazip, httpbin), de modo que la caída de uno solo no rompe la resolución
+> de IP. Si todos fallan levanta `AllIPCheckersFailedError`.
 
 **Context Managers:**
 
@@ -159,6 +175,7 @@ with client.rotated_session():
 | `TorConnectionError` | No se puede conectar al controlador de Tor |
 | `TorNotReadyError` | Tor no está completamente bootstrapped |
 | `IPFetchError` | No se puede determinar la IP pública |
+| `AllIPCheckersFailedError` | Fallaron todos los servicios de checkeo de IP (subclase de `IPFetchError`) |
 
 ## ⚙️ Cómo Funciona
 

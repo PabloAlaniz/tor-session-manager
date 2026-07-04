@@ -7,13 +7,14 @@ designed for ethical web scraping, security research, and privacy testing.
 
 from .client import TorClient, rotate_and_get_ip
 from .exceptions import (
-    TorSessionError,
+    AllIPCheckersFailedError,
+    IPFetchError,
     TorConnectionError,
     TorNotReadyError,
-    IPFetchError,
+    TorSessionError,
 )
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 __author__ = "Pablo Alaniz"
 __email__ = "pablo@culturainteractiva.com"
 
@@ -21,7 +22,8 @@ __all__ = [
     "TorClient",
     "rotate_and_get_ip",
     "TorSessionError",
-    "TorConnectionError", 
+    "TorConnectionError",
     "TorNotReadyError",
     "IPFetchError",
+    "AllIPCheckersFailedError",
 ]

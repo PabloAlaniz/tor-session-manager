@@ -4,19 +4,58 @@ Tor Session Manager - Client module
 A Python client for managing Tor circuits and sessions programmatically.
 """
 
-import time
 import logging
-from typing import Optional
+import time
 from contextlib import contextmanager
+from typing import Optional
 
 import requests
 from stem import Signal
 from stem.control import Controller
 
-from .exceptions import TorConnectionError, TorNotReadyError, IPFetchError
-
+from .exceptions import (
+    TorConnectionError,
+    TorNotReadyError,
+    TorSessionError,
+)
+from .ip_checkers import fetch_ip_with_fallback
 
 logger = logging.getLogger(__name__)
+
+
+def _retry_with_backoff(fn, attempts: int = 4, base_delay: float = 2.0):
+    """
+    Call ``fn`` retrying transient failures with exponential backoff.
+
+    Waits ``base_delay * 2**i`` seconds between attempts (2, 4, 8, 16 ...).
+    Re-raises the last exception if all attempts fail.
+
+    Args:
+        fn: Zero-argument callable to execute.
+        attempts: Maximum number of attempts (default: 4).
+        base_delay: Base delay in seconds for the backoff (default: 2.0).
+
+    Returns:
+        Whatever ``fn`` returns on the first success.
+    """
+    last_exc: Optional[Exception] = None
+    for i in range(attempts):
+        try:
+            return fn()
+        except Exception as e:  # noqa: BLE001 - retried and re-raised below
+            last_exc = e
+            if i < attempts - 1:
+                delay = base_delay * (2**i)
+                logger.debug(
+                    "Attempt %d/%d failed (%s); retrying in %.1fs",
+                    i + 1,
+                    attempts,
+                    e,
+                    delay,
+                )
+                time.sleep(delay)
+    assert last_exc is not None
+    raise last_exc
 
 
 class TorClient:
@@ -147,29 +186,73 @@ class TorClient:
     def get_ip(self) -> str:
         """
         Get the current public IP address as seen through Tor.
-        
+
+        Tries several IP-check endpoints in order (see
+        :data:`tor_session_manager.ip_checkers.IP_CHECKERS`) so a single
+        service outage does not break IP resolution.
+
         Returns:
             The public IP address string.
-            
+
         Raises:
-            IPFetchError: If unable to determine the IP address.
+            AllIPCheckersFailedError: If every IP checker fails.
+            IPFetchError: For other IP resolution failures.
         """
         session = self._session or self._create_session()
-        
+
         try:
-            response = session.get(
-                self.IP_CHECK_URL,
-                timeout=self.IP_CHECK_TIMEOUT
-            )
-            response.raise_for_status()
-            ip = response.json().get("ip")
-            logger.debug(f"Current IP: {ip}")
-            return ip
-        except requests.RequestException as e:
-            raise IPFetchError(f"Failed to fetch IP address: {e}")
+            return fetch_ip_with_fallback(session, self.IP_CHECK_TIMEOUT)
         finally:
             if not self._session:
                 session.close()
+
+    def wait_for_new_ip(
+        self,
+        previous_ip: Optional[str] = None,
+        max_attempts: int = 5,
+    ) -> str:
+        """
+        Rotate the circuit until the exit IP actually changes.
+
+        A single ``rotate()`` can occasionally reuse the same exit node, so
+        the observed IP may not change. This method rotates repeatedly until
+        it observes a different IP or runs out of attempts.
+
+        Args:
+            previous_ip: The IP to change away from. If None, it is captured
+                with ``get_ip()`` before rotating.
+            max_attempts: Maximum number of rotations to try (default: 5).
+
+        Returns:
+            The new (different) public IP address.
+
+        Raises:
+            TorSessionError: If the IP does not change after ``max_attempts``.
+        """
+        if previous_ip is None:
+            previous_ip = self.get_ip()
+
+        for attempt in range(1, max_attempts + 1):
+            self.rotate()
+            current_ip = self.get_ip()
+            if current_ip != previous_ip:
+                logger.info(
+                    "New IP obtained after %d rotation(s): %s",
+                    attempt,
+                    current_ip,
+                )
+                return current_ip
+            logger.debug(
+                "IP unchanged after rotation %d/%d (%s)",
+                attempt,
+                max_attempts,
+                current_ip,
+            )
+
+        raise TorSessionError(
+            f"IP did not change after {max_attempts} rotation attempts "
+            f"(still {previous_ip})"
+        )
     
     @contextmanager
     def rotated_session(self):

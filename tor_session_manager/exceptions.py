@@ -21,3 +21,8 @@ class TorNotReadyError(TorSessionError):
 class IPFetchError(TorSessionError):
     """Raised when unable to determine public IP."""
     pass
+
+
+class AllIPCheckersFailedError(IPFetchError):
+    """Raised when every configured IP checker endpoint fails."""
+    pass
