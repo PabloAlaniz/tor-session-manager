@@ -148,6 +148,7 @@ TorClient(
 | `reset_exit_nodes()` | Limpiar cualquier restricción de exit |
 | `new_circuit(exit_country=None, exit_fingerprint=None, ...)` | Construir circuito nuevo con el exit elegido |
 | `pinned_exit(...)` | Context manager: fija el exit y lo limpia al salir |
+| `circuit_pool(size=3)` | Crear un `CircuitPool` de circuitos aislados ligado a este cliente |
 | `proxies` | Propiedad que devuelve dict de proxy para requests |
 
 > 💡 **Rotación verificada:** `rotate()` a veces reutiliza el mismo nodo de salida, así que la IP puede
@@ -236,6 +237,33 @@ with TorClient() as client:
 > `new_circuit(verify=True)` (default) lo detecta y levanta `TorSessionError` con un mensaje claro en
 > vez de colgarse. La restricción persiste a nivel del proceso Tor hasta que la limpiás con
 > `reset_exit_nodes()` (o usás `pinned_exit`, que lo hace por vos).
+
+### Pool de circuitos y "best circuit"
+
+Para elegir el circuito más rápido, `CircuitPool` mantiene varios circuitos en paralelo, los
+benchmarkea y te deja usar el mejor:
+
+```python
+with TorClient() as client:
+    with client.circuit_pool(size=4) as pool:
+        pool.build().benchmark()          # levanta 4 circuitos y los mide
+        best = pool.pin_fastest()
+        print(f"Mejor circuito: {best.exit_ip} · {best.health.latency_ms:.0f} ms")
+
+        # Usar el circuito más rápido para tus requests
+        requests.get(url, proxies=pool.pinned_proxies)
+
+        # Ver el ranking, o descartar/pinear otro
+        for c in pool.ranked():
+            print(c.name, c.exit_ip, c.health.latency_ms)
+        pool.prune(keep=2)                 # quedarse solo con los 2 mejores
+```
+
+Cada "lane" del pool es un circuito **independiente**: se logra dándole a cada `requests.Session`
+una credencial SOCKS distinta, y Tor (con `IsolateSOCKSAuth`, activo por defecto) rutea cada
+credencial por un circuito separado. `PooledCircuit` expone `session`, `proxies`, `health`
+(`CircuitHealth`) y `exit_ip`. `drop(circuit)` recicla un lane (nueva credencial = circuito nuevo),
+útil para descartar uno lento o bloqueado.
 
 **Context Managers:**
 

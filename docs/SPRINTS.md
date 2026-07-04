@@ -54,9 +54,10 @@ IP checkers con fallback, rotación verificable y reintentos.
 - `set_exit_country("us")`, `set_exit_nodes()`, `reset_exit_nodes()`, contextmanager `pinned_exit()`.
 - Helpers puros en `exits.py`. Manejo de `StrictNodes` (país sin exits → `TorSessionError` claro).
 
-### Sprint 5 — Pool de circuitos + "best circuit" ⚡
-- `CircuitPool`: construye N circuitos, los benchmarkea, fija (pin) el más rápido.
-- `pin_fastest(n=3)`, `drop_circuit(fingerprint)` para descartar lentos/bloqueados.
+### Sprint 5 — Pool de circuitos + "best circuit" ⚡ ✅ (v1.5.0)
+- `CircuitPool` en `pool.py`: mantiene N lanes aislados por credencial SOCKS; `build()`,
+  `benchmark()`, `ranked()`, `fastest()`, `pin_fastest()` (+ `pinned_proxies`).
+- `drop(circuit)` y `prune(keep)` para descartar lentos/bloqueados. `TorClient.circuit_pool()`.
 
 ### Sprint 6 — Detección de bloqueo del destino + auto-rotación 🛡️
 - Detección de respuesta bloqueada: 403/429, challenge de Cloudflare/CAPTCHA → `BlockedResponseError`.
@@ -106,4 +107,5 @@ IP checkers con fallback, rotación verificable y reintentos.
 - **Sprint 2**: ✅ implementado en v1.2.0.
 - **Sprint 3**: ✅ implementado en v1.3.0.
 - **Sprint 4**: ✅ implementado en v1.4.0.
-- **Sprints 5–10**: planificados.
+- **Sprint 5**: ✅ implementado en v1.5.0.
+- **Sprints 6–10**: planificados.

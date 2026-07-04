@@ -14,9 +14,10 @@ from .exceptions import (
     TorNotReadyError,
     TorSessionError,
 )
+from .pool import CircuitPool, PooledCircuit
 from .quality import CircuitHealth
 
-__version__ = "1.4.0"
+__version__ = "1.5.0"
 __author__ = "Pablo Alaniz"
 __email__ = "pablo@culturainteractiva.com"
 
@@ -26,6 +27,8 @@ __all__ = [
     "CircuitInfo",
     "RelayInfo",
     "CircuitHealth",
+    "CircuitPool",
+    "PooledCircuit",
     "TorSessionError",
     "TorConnectionError",
     "TorNotReadyError",

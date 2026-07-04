@@ -577,6 +577,21 @@ class TorClient:
         finally:
             self.reset_exit_nodes()
 
+    def circuit_pool(self, size: int = 3):
+        """
+        Create a :class:`CircuitPool` of isolated circuits bound to this client.
+
+        Args:
+            size: Number of circuit lanes to maintain (default: 3).
+
+        Returns:
+            A new (unbuilt) ``CircuitPool``. Call ``.build().benchmark()`` and
+            then ``.pin_fastest()`` to select the best lane.
+        """
+        from .pool import CircuitPool
+
+        return CircuitPool(self, size=size)
+
     @property
     def proxies(self) -> dict:
         """
