@@ -21,3 +21,22 @@ class TorNotReadyError(TorSessionError):
 class IPFetchError(TorSessionError):
     """Raised when unable to determine public IP."""
     pass
+
+
+class AllIPCheckersFailedError(IPFetchError):
+    """Raised when every configured IP checker endpoint fails."""
+    pass
+
+
+class BlockedResponseError(TorSessionError):
+    """Raised when a request stays blocked after exhausting exit rotations."""
+
+    def __init__(self, message, reason=None, response=None):
+        super().__init__(message)
+        self.reason = reason
+        self.response = response
+
+
+class BridgeConfigError(TorSessionError):
+    """Raised for an invalid bridge line or a missing pluggable transport."""
+    pass

@@ -1,5 +1,7 @@
 # FODA - tor-session-manager
 
+> ⚠️ **Supersedido.** El roadmap vigente vive en [`docs/SPRINTS.md`](docs/SPRINTS.md).
+
 *Análisis: 2025-02-19*
 
 ## 🟢 Fortalezas

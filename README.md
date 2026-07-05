@@ -2,7 +2,9 @@
 
 Una librería Python liviana para gestionar sesiones Tor y rotar circuitos programáticamente.
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![CI](https://github.com/PabloAlaniz/tor-session-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/PabloAlaniz/tor-session-manager/actions/workflows/ci.yml)
+[![PyPI version](https://img.shields.io/pypi/v/tor-session-manager.svg)](https://pypi.org/project/tor-session-manager/)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## 🎯 Casos de Uso
@@ -135,8 +137,290 @@ TorClient(
 |--------|-------------|
 | `is_ready()` | Verificar si Tor está corriendo y bootstrapped |
 | `rotate()` | Solicitar nuevo circuito (nueva IP de salida) |
-| `get_ip()` | Obtener IP pública actual a través de Tor |
+| `get_ip()` | Obtener IP pública actual a través de Tor (con fallback entre varios servicios) |
+| `wait_for_new_ip(previous_ip=None, max_attempts=5)` | Rotar hasta que la IP de salida realmente cambie |
+| `list_circuits()` | Listar todos los circuitos Tor activos (`CircuitInfo`) |
+| `get_circuit_info(circuit_id=None)` | Detalle de un circuito, o del circuito activo (BUILT/GENERAL más reciente) |
+| `get_exit_country(circuit_id=None)` | Código de país ISO del nodo de salida del circuito |
+| `measure_latency(url=None, samples=3)` | Latencia (ms, mediana de N muestras) del circuito actual |
+| `measure_throughput(url=None)` | Ancho de banda de descarga (KB/s) del circuito actual |
+| `benchmark(...)` | Combina latencia + throughput en un `CircuitHealth` |
+| `set_exit_country(country, strict=True)` | Forzar el país del nodo de salida |
+| `set_exit_nodes(countries=None, fingerprints=None, strict=True)` | Restringir exits por país y/o fingerprint |
+| `reset_exit_nodes()` | Limpiar cualquier restricción de exit |
+| `new_circuit(exit_country=None, exit_fingerprint=None, ...)` | Construir circuito nuevo con el exit elegido |
+| `pinned_exit(...)` | Context manager: fija el exit y lo limpia al salir |
+| `circuit_pool(size=3)` | Crear un `CircuitPool` de circuitos aislados ligado a este cliente |
+| `request(url, method="GET", ...)` | Hacer un request a través de Tor |
+| `request_with_retry(url, max_rotations=3, ...)` | Request que rota a un exit nuevo si detecta bloqueo |
+| `is_exit_blocklisted(url)` | Motivo de bloqueo del exit actual al pedir `url` (o `None`) |
 | `proxies` | Propiedad que devuelve dict de proxy para requests |
+
+> 💡 **Rotación verificada:** `rotate()` a veces reutiliza el mismo nodo de salida, así que la IP puede
+> no cambiar. `wait_for_new_ip()` rota repetidamente hasta observar una IP distinta (o agotar
+> `max_attempts`), útil cuando necesitás garantizar un exit nuevo entre requests.
+
+```python
+with TorClient() as client:
+    ip_vieja = client.get_ip()
+    ip_nueva = client.wait_for_new_ip(previous_ip=ip_vieja)
+    print(f"{ip_vieja} -> {ip_nueva}")
+```
+
+> 🔁 **IP checkers con fallback:** `get_ip()` prueba varios servicios en orden
+> (ipify, ifconfig.me, icanhazip, httpbin), de modo que la caída de uno solo no rompe la resolución
+> de IP. Si todos fallan levanta `AllIPCheckersFailedError`.
+
+### Inspección de circuitos
+
+Podés ver qué relays componen tus circuitos y por qué país salís:
+
+```python
+with TorClient() as client:
+    info = client.get_circuit_info()  # circuito activo (BUILT/GENERAL más reciente)
+    print(f"Circuito {info.id} · estado {info.status}")
+    for hop in info.path:
+        print(f"  {hop.nickname or hop.fingerprint} ({hop.country or '??'})")
+
+    exit_relay = info.exit_relay
+    print(f"Salida: {exit_relay.address} en {info.exit_country}")
+
+    # También podés listar todos los circuitos o consultar solo el país de salida
+    print(f"Circuitos activos: {len(client.list_circuits())}")
+    print(f"País de salida: {client.get_exit_country()}")
+```
+
+`CircuitInfo` expone `id`, `status`, `purpose`, `path` (lista de `RelayInfo`), `build_flags`,
+`created`, y las propiedades `exit_relay` y `exit_country`. `RelayInfo` tiene `fingerprint`,
+`nickname`, `address` y `country`. La resolución de IP/país del exit es best-effort: si el GeoIP
+o la consulta al consenso fallan, esos campos quedan en `None` sin romper la llamada.
+
+### Medición de calidad del circuito
+
+Podés medir qué tan bueno es el circuito actual (latencia y ancho de banda, a nivel aplicación a
+través de Tor) para decidir si conviene rotar:
+
+```python
+with TorClient() as client:
+    health = client.benchmark()
+    print(f"Latencia: {health.latency_ms:.0f} ms")
+    print(f"Throughput: {health.throughput_kbps:.0f} KB/s")
+
+    # O medir por separado
+    print(f"Latencia: {client.measure_latency(samples=5):.0f} ms")
+
+    # Rotar si el circuito está lento
+    if health.latency_ms and health.latency_ms > 2000:
+        client.rotate()
+```
+
+`benchmark()` es best-effort: si una métrica falla (p. ej. cae el endpoint de throughput), ese campo
+queda en `None` y la otra se reporta igual. `CircuitHealth` expone `latency_ms`, `throughput_kbps`,
+`samples`, `measured_at` (epoch) y la propiedad `ok` (True si al menos una métrica se resolvió).
+
+### Elegir el nodo de salida (país / a demanda)
+
+Podés forzar por qué país —o por qué relay— salís, útil para esquivar bloqueos del destino que
+prohíben ciertas IPs de salida:
+
+```python
+with TorClient() as client:
+    # Salir por un país específico y confirmar que el circuito funciona
+    nueva_ip = client.new_circuit(exit_country="de")
+    print(f"Saliendo por Alemania: {nueva_ip} ({client.get_exit_country()})")
+
+    # Pinear el exit solo para un bloque; se limpia automáticamente al salir
+    with client.pinned_exit(countries=["nl"]):
+        requests.get(url, proxies=client.proxies)  # sale por Países Bajos
+
+    # Limpiar cualquier restricción manualmente
+    client.reset_exit_nodes()
+```
+
+> ⚠️ **StrictNodes y países sin exits:** con `strict=True` (por defecto) Tor usa *solo* exits que
+> cumplan la restricción. Si el país no tiene exits usables, no puede armar circuito;
+> `new_circuit(verify=True)` (default) lo detecta y levanta `TorSessionError` con un mensaje claro en
+> vez de colgarse. La restricción persiste a nivel del proceso Tor hasta que la limpiás con
+> `reset_exit_nodes()` (o usás `pinned_exit`, que lo hace por vos).
+
+### Pool de circuitos y "best circuit"
+
+Para elegir el circuito más rápido, `CircuitPool` mantiene varios circuitos en paralelo, los
+benchmarkea y te deja usar el mejor:
+
+```python
+with TorClient() as client:
+    with client.circuit_pool(size=4) as pool:
+        pool.build().benchmark()          # levanta 4 circuitos y los mide
+        best = pool.pin_fastest()
+        print(f"Mejor circuito: {best.exit_ip} · {best.health.latency_ms:.0f} ms")
+
+        # Usar el circuito más rápido para tus requests
+        requests.get(url, proxies=pool.pinned_proxies)
+
+        # Ver el ranking, o descartar/pinear otro
+        for c in pool.ranked():
+            print(c.name, c.exit_ip, c.health.latency_ms)
+        pool.prune(keep=2)                 # quedarse solo con los 2 mejores
+```
+
+Cada "lane" del pool es un circuito **independiente**: se logra dándole a cada `requests.Session`
+una credencial SOCKS distinta, y Tor (con `IsolateSOCKSAuth`, activo por defecto) rutea cada
+credencial por un circuito separado. `PooledCircuit` expone `session`, `proxies`, `health`
+(`CircuitHealth`) y `exit_ip`. `drop(circuit)` recicla un lane (nueva credencial = circuito nuevo),
+útil para descartar uno lento o bloqueado.
+
+### Detección de bloqueo del destino y auto-rotación
+
+Muchos sitios bloquean IPs de salida Tor (Cloudflare, CAPTCHA, 403/429). `request_with_retry()`
+detecta esas respuestas y rota a un exit nuevo automáticamente hasta pasar:
+
+```python
+with TorClient() as client:
+    # Rota de exit hasta obtener una respuesta no bloqueada (o levanta BlockedResponseError)
+    response = client.request_with_retry("https://sitio-que-bloquea-tor.com", max_rotations=5)
+    print(response.status_code)
+
+    # ¿El exit actual está bloqueado por este sitio?
+    motivo = client.is_exit_blocklisted("https://sitio-que-bloquea-tor.com")
+    if motivo:
+        print(f"Exit bloqueado: {motivo}")
+```
+
+La detección (`detect_block`) reconoce challenges de Cloudflare/CAPTCHA en el body y statuses de
+bloqueo (403/429/503). Es **heurística** —un 403 legítimo puede parecer un bloqueo—, así que los
+marcadores y statuses son ajustables:
+
+```python
+response = client.request_with_retry(
+    url,
+    markers=("acceso denegado", "captcha"),   # marcadores de challenge propios
+    statuses={403, 429, 503, 418},             # statuses considerados bloqueo
+)
+```
+
+Cuando se agotan las rotaciones sin éxito, levanta `BlockedResponseError` (con `.reason` y
+`.response` para inspeccionar el último intento).
+
+### Async / scraping concurrente
+
+Para scraping paralelo hay un cliente async, `TorClientAsync` (sobre `aiohttp`). Instalá el extra:
+
+```bash
+pip install tor-session-manager[async]
+```
+
+```python
+import asyncio
+from tor_session_manager import TorClientAsync
+
+async def main():
+    async with TorClientAsync(max_concurrency=10) as client:
+        print(await client.get_ip())
+
+        # Descargar muchas URLs concurrentemente (acotado por max_concurrency)
+        urls = ["https://httpbin.org/get"] * 50
+        responses = await client.gather_requests(urls)
+        ok = [r for r in responses if r is not None]
+        print(f"{len(ok)}/{len(urls)} OK")
+
+        # También async: rotate(), request_with_retry(), benchmark(),
+        # set_exit_country(), new_circuit()
+        await client.rotate()
+
+asyncio.run(main())
+```
+
+El control-plane (rotate, selección de exit) usa `stem` por debajo vía `asyncio.to_thread`; el
+data-plane (requests, medición) va por `aiohttp` con `aiohttp_socks` (DNS ruteado por Tor). Cada URL
+que falla en `gather_requests` queda como `None` en su posición, sin cortar el lote.
+
+### Bridges y pluggable transports (bajo censura)
+
+Cuando el ISP o el país bloquean Tor *mismo*, los relays normales son inalcanzables. Con **bridges**
+(relays no listados) y **pluggable transports** (obfs4, snowflake, meek, webtunnel) el tráfico se
+ofusca para no parecer Tor. La librería lanza un Tor gestionado con esa config:
+
+```python
+from tor_session_manager import launch_bridged_tor, TorClient
+
+# Las bridge lines las obtenés de https://bridges.torproject.org o Telegram @GetBridgesBot
+proc = launch_bridged_tor(
+    bridges=[
+        "obfs4 192.0.2.1:443 0123...CDEF cert=... iat-mode=0",
+        "obfs4 192.0.2.2:443 89AB...4567 cert=... iat-mode=0",
+    ],
+    socks_port=9050,
+    control_port=9051,
+)
+
+# Ahora usás el TorClient normal contra esos puertos
+with TorClient(control_port=9051, socks_port=9050) as client:
+    print(client.get_ip())
+
+proc.terminate()  # cerrar el Tor gestionado al terminar
+```
+
+> ⚠️ **Binarios de los transports:** `obfs4proxy`, `snowflake-client`, etc. **no** vienen con la
+> librería — tienen que estar instalados y en el `PATH` (o pasás la ruta con
+> `transport_paths={"obfs4": "/ruta/obfs4proxy"}`). Si falta el binario, se levanta `BridgeConfigError`
+> con un mensaje claro.
+
+`UseBridges`/`Bridge`/`ClientTransportPlugin` son opciones de *arranque* de Tor (no se pueden encender
+en un Tor ya corriendo), por eso el flujo soportado es lanzar un Tor propio. También podés usar
+`parse_bridge_line()` y `build_bridge_config()` por separado si querés armar tu propio `torrc`.
+
+### Anti-fingerprint: rotación de headers + pacing
+
+Rotar la IP no alcanza si cada request lleva el mismo `User-Agent`: ese fingerprint te identifica igual.
+`TorClient` puede rotar perfiles de headers coherentes (de navegadores reales) y pacear el ritmo por
+host con backoff adaptativo ante 429:
+
+```python
+client = TorClient(rotate_headers=True, rate_limit=1.0)  # 1s mínimo entre requests por host
+
+with client:
+    # request() inyecta un perfil de headers distinto por request y respeta el ritmo
+    r1 = client.request("https://ejemplo.com/a")
+    r2 = client.request("https://ejemplo.com/b")  # espera ~1s; si el host devuelve 429, el ritmo se ensancha
+```
+
+También podés usar los componentes sueltos: `HeaderRotator` (round-robin sobre `BROWSER_PROFILES`,
+o `shuffle=True`) y `RateLimiter` (pacing por host con `acquire()`/`record()`).
+
+> ⚠️ **Sobre TLS/JA3:** `requests` usa el `ssl` de la stdlib, así que el fingerprint **JA3/TLS del
+> handshake es fijo** y no se puede cambiar desde esta librería. La rotación de headers es la palanca
+> a nivel *aplicación*; para spoofear JA3 haría falta algo como `curl_cffi` (fuera de alcance).
+
+## 🖥️ CLI
+
+Instalar el paquete deja disponible el comando `tor-session`:
+
+```bash
+tor-session ip                 # IP de salida actual
+tor-session rotate             # rota y muestra la nueva IP
+tor-session circuit            # relays del circuito activo y país de salida
+tor-session country            # país del nodo de salida
+tor-session benchmark          # latencia + throughput del circuito
+tor-session status --json      # snapshot completo en JSON (para monitoreo)
+```
+
+Flags globales: `--control-port`, `--socks-port`, `--password` y `--json` (salida machine-readable
+para integrar con scripts o dashboards). Ejemplo de observabilidad:
+
+```bash
+tor-session status --json | jq '{ip, exit_country, latency: .health.latency_ms}'
+```
+
+## 🧪 Fixture de pytest
+
+El paquete registra una fixture `tor_client` (vía entry point de pytest) que provee un `TorClient`
+listo, o **skipea** el test si Tor no está corriendo:
+
+```python
+def test_mi_scraper(tor_client):
+    assert tor_client.get_ip()  # se saltea automáticamente si no hay Tor
+```
 
 **Context Managers:**
 
@@ -159,6 +443,9 @@ with client.rotated_session():
 | `TorConnectionError` | No se puede conectar al controlador de Tor |
 | `TorNotReadyError` | Tor no está completamente bootstrapped |
 | `IPFetchError` | No se puede determinar la IP pública |
+| `AllIPCheckersFailedError` | Fallaron todos los servicios de checkeo de IP (subclase de `IPFetchError`) |
+| `BlockedResponseError` | La respuesta siguió bloqueada tras agotar las rotaciones de exit |
+| `BridgeConfigError` | Bridge line inválida o binario de pluggable transport faltante |
 
 ## ⚙️ Cómo Funciona
 

@@ -1,5 +1,8 @@
 # ROADMAP - tor-session-manager
 
+> ⚠️ **Supersedido.** Este roadmap quedó obsoleto y contradictorio con otros archivos de planificación.
+> La fuente única de verdad es ahora [`docs/SPRINTS.md`](docs/SPRINTS.md).
+
 *Actualizado: 2025-02-19*
 
 ## ✅ Completado

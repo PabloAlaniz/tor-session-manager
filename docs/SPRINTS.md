@@ -1,0 +1,123 @@
+# Roadmap de 10 sprints — tor-session-manager
+
+*Actualizado: 2026-07-04*
+
+Este documento es la **fuente única de verdad** del roadmap y reemplaza a los archivos previos
+(`/ROADMAP.md`, `/docs/ROADMAP.md`, `/FODA.md`, `/docs/FODA.md`), que quedaron duplicados y
+contradictorios entre sí (llegaban a discrepar en algo tan básico como si el paquete estaba
+publicado en PyPI).
+
+## Foco
+
+Dos ejes entrelazados:
+
+1. **Saltar cualquier bloqueo** 🛡️
+   - *Llegar a Tor bajo censura*: bridges y pluggable transports (obfs4, snowflake, meek).
+   - *Esquivar bloqueos del destino*: exit nodes en listas negras, Cloudflare/CAPTCHA, selección de
+     país de salida.
+2. **Mejor calidad de conexión** ⚡
+   - Medir y elegir circuitos rápidos.
+   - Robustez / reintentos.
+   - Concurrencia (async).
+
+El orden es **fundación-primero**: cada sprint deja código utilizable con tests y construye sobre el
+anterior. Primero *ver* y *medir* los circuitos para poder *elegirlos*; luego esquivar bloqueos del
+destino; después la concurrencia; y como bloque autocontenido, la censura para llegar a Tor.
+
+---
+
+## Sprints
+
+Leyenda: 🛡️ = saltar bloqueo · ⚡ = calidad de conexión.
+
+### Sprint 1 — Robustez de base ⚡🛡️ ✅ (v1.1.0)
+IP checkers con fallback, rotación verificable y reintentos.
+- `ip_checkers.py`: varios endpoints (ipify, ifconfig.me, icanhazip, httpbin) con
+  `fetch_ip_with_fallback()`.
+- `get_ip()` usa el fallback en lugar de un único endpoint.
+- `TorClient.wait_for_new_ip()`: rota hasta que la IP realmente cambie.
+- Helper `_retry_with_backoff()` (backoff exponencial) reutilizable.
+- Excepción `AllIPCheckersFailedError`.
+
+### Sprint 2 — Introspección de circuitos ⚡🛡️ ✅ (v1.2.0)
+- `get_circuit_info()` → circuito activo, fingerprints de los relays, nickname/IP del exit.
+- `get_exit_country()` (GeoIP de stem).
+- `list_circuits()`. Dataclasses `CircuitInfo` y `RelayInfo` en `circuits.py`.
+
+### Sprint 3 — Medición de calidad de circuito ⚡ ✅ (v1.3.0)
+- `measure_latency()` (mediana de N muestras) y `measure_throughput()` (KB/s) por el circuito.
+- Dataclass `CircuitHealth` (latencia, throughput, samples, timestamp, `.ok`) en `quality.py`.
+- `benchmark()` que combina ambas mediciones de forma tolerante a fallos.
+
+### Sprint 4 — Selección de nodo de salida por país / a demanda 🛡️⚡ ✅ (v1.4.0)
+- `new_circuit(exit_country=None, exit_fingerprint=None, verify=True)` vía `ExitNodes`/`StrictNodes`.
+- `set_exit_country("us")`, `set_exit_nodes()`, `reset_exit_nodes()`, contextmanager `pinned_exit()`.
+- Helpers puros en `exits.py`. Manejo de `StrictNodes` (país sin exits → `TorSessionError` claro).
+
+### Sprint 5 — Pool de circuitos + "best circuit" ⚡ ✅ (v1.5.0)
+- `CircuitPool` en `pool.py`: mantiene N lanes aislados por credencial SOCKS; `build()`,
+  `benchmark()`, `ranked()`, `fastest()`, `pin_fastest()` (+ `pinned_proxies`).
+- `drop(circuit)` y `prune(keep)` para descartar lentos/bloqueados. `TorClient.circuit_pool()`.
+
+### Sprint 6 — Detección de bloqueo del destino + auto-rotación 🛡️ ✅ (v1.6.0)
+- `blocking.py` con `detect_block()` (challenges de Cloudflare/CAPTCHA, 403/429/503, markers ajustables).
+- `TorClient.request()`, `request_with_retry()` (rota ante bloqueo) e `is_exit_blocklisted()`.
+- `BlockedResponseError` (con `.reason`/`.response`).
+
+### Sprint 7 — Soporte async (`TorClientAsync`) ⚡ ✅ (v1.7.0)
+- `aio.py`: `TorClientAsync` con `aiohttp` + `aiohttp_socks`; get_ip/request/request_with_retry/
+  benchmark async, control-plane vía `asyncio.to_thread`, `AsyncResponse` (reusa `detect_block`).
+- `gather_requests()`: fetch concurrente acotado por semáforo (scraping paralelo).
+- Dependencia opcional `[async]` en `pyproject.toml`; import guardado en `__init__`.
+
+### Sprint 8 — Censura: bridges + pluggable transports 🛡️ ✅ (v1.8.0)
+- `bridges.py`: `Bridge` + `parse_bridge_line()`, `transport_binary()`, `build_bridge_config()`
+  (obfs4/snowflake/meek/webtunnel) y `launch_bridged_tor()` (Tor gestionado con Bridge +
+  ClientTransportPlugin).
+- `BridgeConfigError` (bridge line inválida / binario PT faltante).
+
+### Sprint 9 — Fingerprint de request + pacing adaptativo 🛡️⚡ ✅ (v1.9.0)
+- `fingerprint.py`: `HeaderProfile`/`BROWSER_PROFILES` (perfiles coherentes) + `HeaderRotator`.
+- `pacing.py`: `RateLimiter` (pacing por host, backoff ante 429/503, decay en OK).
+- `TorClient(rotate_headers=..., rate_limit=...)` integrado en `request()`. JA3/TLS documentado como
+  límite conocido (requiere curl_cffi, fuera de alcance).
+
+### Sprint 10 — CLI, observabilidad, integraciones y release ⚡🛡️ ✅ (v1.10.0)
+- CLI `tor-session` (`ip`/`rotate`/`circuit`/`country`/`benchmark`/`status --json`) en `cli.py`.
+- Observabilidad: `CircuitHealth.as_dict()` / `CircuitInfo.as_dict()` serializables + `status --json`.
+- Fixture de pytest (`tor_client`) vía entry point `pytest11`; `py.typed` (PEP 561).
+- Workflow `publish.yml` (PyPI trusted publishing en release) + badges. Scrapy documentado como
+  futuro (no soporta SOCKS nativo).
+
+---
+
+## Trazabilidad de los dos ejes
+
+| Eje | Sprints |
+|-----|---------|
+| 🛡️ Saltar bloqueo — destino | 4, 6, 9 |
+| 🛡️ Saltar bloqueo — llegar a Tor (censura) | 8 |
+| ⚡ Calidad — medir/elegir circuito | 2, 3, 5 |
+| ⚡ Calidad — robustez/reintentos | 1, 6 |
+| ⚡ Calidad — concurrencia (async) | 7 |
+| Productizar / release | 1 (docs), 10 |
+
+---
+
+## Estado
+
+- **Sprint 1**: ✅ implementado en v1.1.0.
+- **Sprint 2**: ✅ implementado en v1.2.0.
+- **Sprint 3**: ✅ implementado en v1.3.0.
+- **Sprint 4**: ✅ implementado en v1.4.0.
+- **Sprint 5**: ✅ implementado en v1.5.0.
+- **Sprint 6**: ✅ implementado en v1.6.0.
+- **Sprint 7**: ✅ implementado en v1.7.0.
+- **Sprint 8**: ✅ implementado en v1.8.0.
+- **Sprint 9**: ✅ implementado en v1.9.0.
+- **Sprint 10**: ✅ implementado en v1.10.0.
+
+**🎉 Roadmap completo — 10/10 sprints.** Ambos ejes cubiertos: 🛡️ saltar bloqueos (selección de
+exit, detección/auto-rotación, bridges + pluggable transports, anti-fingerprint) y ⚡ calidad
+(robustez, introspección, medición, best-circuit, async). Paquete listo para release (CLI, `py.typed`,
+workflow de PyPI).
