@@ -648,7 +648,10 @@ logging.basicConfig(
 
 ## 🤝 Contribuciones
 
-¡Las contribuciones son bienvenidas! Sentite libre de abrir issues y pull requests.
+¡Las contribuciones son bienvenidas! Antes de abrir un issue o pull request, leé la [guía de contribución](CONTRIBUTING.md).
+
+- Participar implica aceptar el [Código de Conducta](CODE_OF_CONDUCT.md).
+- Las vulnerabilidades se reportan en privado según la [Política de Seguridad](SECURITY.md), no como issue público.
 
 ## 📄 Licencia
 

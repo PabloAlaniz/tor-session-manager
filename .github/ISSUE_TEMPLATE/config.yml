@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Reportar una vulnerabilidad
+    url: https://github.com/PabloAlaniz/tor-session-manager/security/advisories/new
+    about: Por favor, reportá problemas de seguridad en privado, no como issue público.
+  - name: 📖 Documentación y Troubleshooting
+    url: https://github.com/PabloAlaniz/tor-session-manager#-troubleshooting
+    about: Muchos problemas de conexión con Tor están resueltos en el README.
