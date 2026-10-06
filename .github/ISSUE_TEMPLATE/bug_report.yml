@@ -1,0 +1,99 @@
+name: 🐛 Reporte de bug
+description: Algo no funciona como debería.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ¡Gracias por tomarte el tiempo de reportarlo!
+        **Si es una vulnerabilidad de seguridad, no uses este formulario:** seguí la [Política de Seguridad](https://github.com/PabloAlaniz/tor-session-manager/blob/main/SECURITY.md).
+
+  - type: checkboxes
+    id: precheck
+    attributes:
+      label: Antes de reportar
+      options:
+        - label: Busqué entre los issues existentes y no encontré uno igual.
+          required: true
+        - label: Revisé la sección Troubleshooting del README.
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Descripción
+      description: ¿Qué pasa?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Pasos para reproducirlo
+      description: Idealmente un snippet mínimo de código o los comandos de la CLI.
+      render: python
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportamiento esperado vs. real
+      placeholder: |
+        Esperaba: ...
+        Pasó: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: status
+    attributes:
+      label: Salida de `tor-session status`
+      description: Corré `tor-session status --json` (con tus puertos si no son los default) y pegá el resultado. Revisá que no incluya passwords.
+      render: json
+
+  - type: input
+    id: lib-version
+    attributes:
+      label: Versión de tor-session-manager
+      description: Salida de `tor-session --version`.
+      placeholder: tor-session 1.10.0
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Versión de Python
+      placeholder: "3.12.4"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Sistema operativo
+      options:
+        - macOS
+        - Linux
+        - Windows
+        - Otro
+    validations:
+      required: true
+
+  - type: input
+    id: tor
+    attributes:
+      label: Versión de Tor y cómo corre
+      description: "Salida de `tor --version` y cómo lo instalaste (brew, apt, Docker, Tor Browser, ...)."
+      placeholder: Tor 0.4.8.12 vía brew services
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / traceback
+      description: Con `logging.basicConfig(level=logging.DEBUG)` si es posible. Se formatea como código automáticamente.
+      render: shell

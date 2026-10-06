@@ -1,0 +1,49 @@
+name: ✨ Propuesta de feature
+description: Sugerí una mejora o una funcionalidad nueva.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ¡Gracias por la idea! Para cambios grandes, conviene acordar el enfoque acá antes de abrir un PR.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema
+      description: ¿Qué querés lograr y qué te lo impide hoy?
+      placeholder: Cuando hago X, necesito Y, pero la librería...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Propuesta
+      description: Cómo te imaginás la solución. Un ejemplo de cómo se usaría la API o la CLI ayuda mucho.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas consideradas
+      description: Workarounds actuales u otros enfoques que evaluaste.
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Caso de uso
+      description: ¿Para qué lo vas a usar? (scraping, investigación, testing, ...)
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Uso legítimo
+      options:
+        - label: La propuesta apunta a un uso legítimo, en línea con el aviso de responsabilidad del README.
+          required: true
+        - label: Estaría dispuesto/a a contribuir con un PR.
