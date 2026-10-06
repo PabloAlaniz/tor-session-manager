@@ -1,5 +1,7 @@
 # Análisis FODA - tor-session-manager
 
+> ⚠️ **Supersedido.** El roadmap vigente vive en [`SPRINTS.md`](SPRINTS.md).
+
 **Fecha:** 2026-02-22  
 **Analista:** Margarita (AI)
 
