@@ -79,7 +79,7 @@ class TorClientAsync:
         connector = ProxyConnector.from_url(
             f"socks5://127.0.0.1:{self.socks_port}", rdns=True
         )
-        return aiohttp.ClientSession(connector=connector)
+        return aiohttp.ClientSession(connector=connector, trust_env=False)
 
     async def __aenter__(self) -> "TorClientAsync":
         ready = await asyncio.to_thread(self._sync.is_ready)
@@ -185,7 +185,9 @@ class TorClientAsync:
         timeout: Optional[float] = None,
         **kwargs,
     ) -> AsyncResponse:
-        """Make a request through Tor and return a materialized response."""
+        """Make a request through Tor; per-request proxy overrides are rejected."""
+        if "proxy" in kwargs or "proxy_auth" in kwargs:
+            raise ValueError("TorClientAsync.request does not allow proxy overrides")
         session = self._require_session()
         client_timeout = aiohttp.ClientTimeout(
             total=timeout or self._sync.IP_CHECK_TIMEOUT
@@ -302,7 +304,7 @@ class TorClientAsync:
         """
         semaphore = asyncio.Semaphore(self.max_concurrency)
 
-        async def _fetch(url):
+        async def _fetch(url: str) -> Optional[AsyncResponse]:
             async with semaphore:
                 try:
                     return await self.request(url, method=method, **kwargs)

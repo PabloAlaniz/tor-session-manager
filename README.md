@@ -392,6 +392,31 @@ o `shuffle=True`) y `RateLimiter` (pacing por host con `acquire()`/`record()`).
 > handshake es fijo** y no se puede cambiar desde esta librería. La rotación de headers es la palanca
 > a nivel *aplicación*; para spoofear JA3 haría falta algo como `curl_cffi` (fuera de alcance).
 
+## 🔒 Política de enrutamiento
+
+Las sesiones internas de `TorClient` y `CircuitPool` usan `socks5h://127.0.0.1:<puerto>`
+(DNS a través del proxy) y `trust_env=False`. `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`,
+`NO_PROXY` y sus variantes en minúscula no reemplazan ni evitan ese proxy, tampoco en
+redirecciones. Si el SOCKS no está disponible, la solicitud falla; no se reintenta por
+una conexión directa. Los checkers alternativos de IP conservan la misma ruta.
+
+`client.request(...)` y `request_with_retry(...)` rechazan el argumento `proxies`, incluso
+`None` o un diccionario vacío, con `ValueError`. `TorClientAsync` usa un conector SOCKS
+con DNS remoto y `trust_env=False`, y rechaza `proxy` y `proxy_auth` por solicitud.
+Elegí el puerto mediante `socks_port` al crear el cliente.
+
+En Requests, desactivar `trust_env` también desactiva credenciales automáticas de `.netrc`
+y `REQUESTS_CA_BUNDLE`/`CURL_CA_BUNDLE`. Si necesitás una CA personalizada, pasá
+`verify="/ruta/ca.pem"` explícitamente a `client.request`; no desactives la verificación TLS.
+
+Esta política cubre las sesiones administradas por la biblioteca. El diccionario
+`client.proxies` no endurece una sesión externa ni impide que el llamador la modifique.
+Para una sesión propia, configurá explícitamente `session.trust_env = False` y
+`session.proxies = client.proxies`, sin overrides por solicitud. Cambiar sesiones,
+adaptadores o conectores queda bajo responsabilidad del llamador. El proxy configurado
+debe ser un Tor confiable: este enrutamiento no garantiza anonimato ni demuestra por
+sí solo que el servidor SOCKS pertenece a Tor.
+
 ## 🖥️ CLI
 
 Instalar el paquete deja disponible el comando `tor-session`:
@@ -405,11 +430,39 @@ tor-session benchmark          # latencia + throughput del circuito
 tor-session status --json      # snapshot completo en JSON (para monitoreo)
 ```
 
-Flags globales: `--control-port`, `--socks-port`, `--password` y `--json` (salida machine-readable
-para integrar con scripts o dashboards). Ejemplo de observabilidad:
+Flags comunes: `--control-port`, `--socks-port`, `--password` y `--json` (salida machine-readable).
+Se aceptan antes o después del subcomando: `tor-session --json status` y
+`tor-session status --json` son equivalentes. Los puertos deben estar entre 1 y 65535.
+Preferí autenticación por cookie: un password pasado como argumento puede ser visible
+en el historial del shell o la lista de procesos.
+
+`status` conserva los campos `version`, `ready`, `ip`, `exit_country`, `num_circuits` y
+`health`, y agrega `checks` y `errors`. Cada check usa `ok`, `failed` o `not_checked`:
+
+- `controller`: conexión al puerto de control.
+- `authentication`: autenticación con Stem; falla de credenciales distinguida de conexión.
+- `bootstrap`: progreso informado por Tor; debe alcanzar 100%.
+- `socks`: el listener local responde al saludo SOCKS5 sin autenticación.
+- `connectivity`: un checker público devuelve una IP válida a través del SOCKS configurado.
+
+`ready` requiere los cinco checks exitosos. Si falla SOCKS o el bootstrap está incompleto,
+la conectividad pública queda sin comprobar. La ruta SOCKS se diagnostica incluso si
+el controlador no está disponible. El saludo SOCKS y una IP pública válida no certifican
+que ese proxy sea Tor ni garantizan anonimato.
+
+Exit codes: `0` si está listo, `1` si `ready=false` (o el comando falla), `2` para
+argumentos inválidos. Los errores de campos auxiliares se informan en `errors` y no
+cambian por sí solos la disponibilidad. En modo `--json`, los errores de ejecución se
+emiten como JSON; los errores de sintaxis de argumentos siguen el formato de argparse.
+Las sondas locales de diagnóstico usan un timeout de 3 segundos por operación; no es
+un límite global de `status`: los checkers y benchmarks conservan sus timeouts habituales.
+`status` hace consultas externas para conectividad y métricas a través del proxy.
+
+Ejemplo de observabilidad (con `pipefail` para conservar el error de `status`):
 
 ```bash
-tor-session status --json | jq '{ip, exit_country, latency: .health.latency_ms}'
+set -o pipefail
+tor-session status --json | jq '{ready, checks, ip, errors}'
 ```
 
 ## 🧪 Fixture de pytest

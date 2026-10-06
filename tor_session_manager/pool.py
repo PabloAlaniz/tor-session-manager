@@ -84,6 +84,7 @@ class CircuitPool:
         self._counter += 1
         name = f"tsm{self._counter}"
         session = requests.Session()
+        session.trust_env = False
         proxy_url = f"socks5h://{name}:{name}@127.0.0.1:{self.client.socks_port}"
         session.proxies = {"http": proxy_url, "https": proxy_url}
         return PooledCircuit(name=name, session=session)

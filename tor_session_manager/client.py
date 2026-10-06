@@ -7,7 +7,7 @@ A Python client for managing Tor circuits and sessions programmatically.
 import logging
 import time
 from contextlib import contextmanager
-from typing import Optional
+from typing import List, Optional
 
 import requests
 from stem import Signal
@@ -67,20 +67,20 @@ def _retry_with_backoff(fn, attempts: int = 4, base_delay: float = 2.0):
 class TorClient:
     """
     A client for managing Tor sessions and rotating circuits.
-    
+
     Use cases:
         - Ethical web scraping with IP rotation
         - Security research and penetration testing
         - Privacy testing for applications
         - Academic network research
-    
+
     Example:
         >>> with TorClient() as client:
         ...     print(f"Current IP: {client.get_ip()}")
         ...     client.rotate()
         ...     print(f"New IP: {client.get_ip()}")
     """
-    
+
     DEFAULT_CONTROL_PORT = 9051
     DEFAULT_SOCKS_PORT = 9050
     DEFAULT_ROTATE_DELAY = 2.0
@@ -91,7 +91,7 @@ class TorClient:
     DEFAULT_LATENCY_URL = "https://httpbin.org/get"
     DEFAULT_THROUGHPUT_URL = "https://httpbin.org/bytes/102400"
     DEFAULT_MEASURE_TIMEOUT = 30
-    
+
     def __init__(
         self,
         control_port: int = DEFAULT_CONTROL_PORT,
@@ -131,7 +131,7 @@ class TorClient:
             from .pacing import RateLimiter
 
             self._rate_limiter = RateLimiter(min_interval=rate_limit)
-    
+
     def __enter__(self) -> "TorClient":
         """Context manager entry - verifies Tor is ready."""
         if not self.is_ready():
@@ -140,23 +140,26 @@ class TorClient:
             )
         self._session = self._create_session()
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         """Context manager exit - cleanup."""
         if self._session:
             self._session.close()
             self._session = None
-    
+
     def _create_session(self) -> requests.Session:
         """Create a requests session configured to use Tor SOCKS proxy."""
         session = requests.Session()
+        # Never let environment proxies or NO_PROXY change Tor routing. This
+        # also disables implicit .netrc credentials and environment CA bundles.
+        session.trust_env = False
         proxy_url = f"socks5h://127.0.0.1:{self.socks_port}"
         session.proxies = {
             "http": proxy_url,
             "https": proxy_url,
         }
         return session
-    
+
     def _get_controller(self) -> Controller:
         """Get an authenticated Tor controller connection."""
         try:
@@ -168,11 +171,11 @@ class TorClient:
             return controller
         except Exception as e:
             raise TorConnectionError(f"Failed to connect to Tor controller: {e}")
-    
+
     def is_ready(self) -> bool:
         """
         Check if Tor is running and fully bootstrapped.
-        
+
         Returns:
             True if Tor is ready, False otherwise.
         """
@@ -187,14 +190,14 @@ class TorClient:
         except Exception as e:
             logger.warning(f"Error checking Tor status: {e}")
             return False
-    
+
     def rotate(self) -> None:
         """
         Request a new Tor circuit (new exit node = new IP).
-        
+
         This sends the NEWNYM signal to Tor, which will use a new
         circuit for subsequent connections.
-        
+
         Raises:
             TorConnectionError: If unable to connect to Tor controller.
         """
@@ -207,11 +210,11 @@ class TorClient:
             raise
         except Exception as e:
             raise TorConnectionError(f"Failed to rotate circuit: {e}")
-        
+
         # Wait for the new circuit to be established
         time.sleep(self.rotate_delay)
         logger.info("Circuit rotation complete")
-    
+
     def get_ip(self) -> str:
         """
         Get the current public IP address as seen through Tor.
@@ -282,18 +285,18 @@ class TorClient:
             f"IP did not change after {max_attempts} rotation attempts "
             f"(still {previous_ip})"
         )
-    
+
     @contextmanager
     def rotated_session(self):
         """
         Context manager that rotates the circuit before yielding.
-        
+
         Example:
             >>> client = TorClient()
             >>> with client.rotated_session():
             ...     # Make requests with a fresh circuit
             ...     response = requests.get(url, proxies=client.proxies)
-        
+
         Yields:
             The TorClient instance with a fresh circuit.
         """
@@ -302,8 +305,8 @@ class TorClient:
             yield self
         finally:
             pass  # Circuit will be reused until next rotation
-    
-    def list_circuits(self) -> list:
+
+    def list_circuits(self) -> List[CircuitInfo]:
         """
         List all Tor circuits currently known to the controller.
 
@@ -611,11 +614,15 @@ class TorClient:
             url: Target URL.
             method: HTTP method (default: "GET").
             timeout: Request timeout (default: ``IP_CHECK_TIMEOUT``).
-            **kwargs: Passed through to ``requests``.
+            **kwargs: Passed through to ``requests``, except ``proxies``;
+                proxy overrides are rejected to preserve Tor routing.
 
         Returns:
             The ``requests.Response``.
         """
+        if "proxies" in kwargs:
+            raise ValueError("TorClient.request does not allow proxy overrides")
+
         if self._header_rotator is not None and "headers" not in kwargs:
             kwargs["headers"] = self._header_rotator.next()
 
@@ -662,7 +669,8 @@ class TorClient:
             markers: Override challenge body markers.
             statuses: Override block HTTP statuses.
             timeout: Request timeout.
-            **kwargs: Passed through to ``requests``.
+            **kwargs: Passed through to ``requests``, except ``proxies``;
+                proxy overrides are rejected to preserve Tor routing.
 
         Returns:
             The first non-blocked ``requests.Response``.
@@ -737,11 +745,11 @@ def rotate_and_get_ip(
 ) -> str:
     """
     Convenience function to rotate circuit and return new IP.
-    
+
     Args:
         control_port: Tor control port
         socks_port: Tor SOCKS port
-        
+
     Returns:
         The new public IP address.
     """

@@ -14,10 +14,11 @@ Usage::
 import argparse
 import json
 import sys
-from typing import Optional
+from typing import Any, Callable, Dict, Optional
 
 from . import __version__
 from .client import TorClient
+from .diagnostics import collect_diagnostics, error_message
 from .exceptions import TorSessionError
 
 
@@ -26,26 +27,55 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="tor-session",
         description="Manage Tor sessions and rotate circuits from the shell.",
     )
-    parser.add_argument(
-        "--version", action="version", version=f"%(prog)s {__version__}"
-    )
-    parser.add_argument(
-        "--control-port", type=int, default=TorClient.DEFAULT_CONTROL_PORT
-    )
-    parser.add_argument("--socks-port", type=int, default=TorClient.DEFAULT_SOCKS_PORT)
-    parser.add_argument("--password", default=None)
-    parser.add_argument(
-        "--json", action="store_true", help="Emit machine-readable JSON output."
-    )
+    _add_common_arguments(parser)
 
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("ip", help="Print the current public exit IP.")
-    sub.add_parser("rotate", help="Rotate the circuit and print the new IP.")
-    sub.add_parser("circuit", help="Print info about the active circuit.")
-    sub.add_parser("country", help="Print the exit relay's country code.")
-    sub.add_parser("benchmark", help="Benchmark the current circuit.")
-    sub.add_parser("status", help="Print a full status snapshot.")
+    commands = {
+        "ip": "Print the current public exit IP.",
+        "rotate": "Rotate the circuit and print the new IP.",
+        "circuit": "Print info about the active circuit.",
+        "country": "Print the exit relay's country code.",
+        "benchmark": "Benchmark the current circuit.",
+        "status": "Check controller, authentication, bootstrap, and proxy connectivity.",
+    }
+    for command, help_text in commands.items():
+        command_parser = sub.add_parser(command, help=help_text)
+        # Suppressed subparser defaults preserve values supplied before the
+        # command, while still accepting the same options after it.
+        _add_common_arguments(command_parser, suppress_defaults=True)
     return parser
+
+
+def _port(value):
+    try:
+        port = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("port must be an integer from 1 to 65535")
+    if not 1 <= port <= 65535:
+        raise argparse.ArgumentTypeError("port must be an integer from 1 to 65535")
+    return port
+
+
+def _add_common_arguments(parser, suppress_defaults=False):
+    def default(value):
+        return argparse.SUPPRESS if suppress_defaults else value
+
+    parser.add_argument(
+        "--version", action="version", version=f"tor-session {__version__}"
+    )
+    parser.add_argument(
+        "--control-port", type=_port, default=default(TorClient.DEFAULT_CONTROL_PORT)
+    )
+    parser.add_argument(
+        "--socks-port", type=_port, default=default(TorClient.DEFAULT_SOCKS_PORT)
+    )
+    parser.add_argument("--password", default=default(None))
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        default=default(False),
+        help="Emit machine-readable JSON output.",
+    )
 
 
 def _emit(payload, as_json: bool, human: str) -> None:
@@ -101,35 +131,43 @@ def _cmd_benchmark(client: TorClient, as_json: bool) -> int:
 def _cmd_status(client: TorClient, as_json: bool) -> int:
     snapshot = {
         "version": __version__,
-        "ready": client.is_ready(),
-        "ip": None,
+        **collect_diagnostics(client),
         "exit_country": None,
         "num_circuits": None,
         "health": None,
+        "errors": {},
     }
     if snapshot["ready"]:
-        try:
-            snapshot["ip"] = client.get_ip()
-        except TorSessionError:
-            pass
-        try:
-            snapshot["exit_country"] = client.get_exit_country()
-        except TorSessionError:
-            pass
-        try:
-            snapshot["num_circuits"] = len(client.list_circuits())
-        except TorSessionError:
-            pass
-        snapshot["health"] = client.benchmark().as_dict()
+        details: Dict[str, Callable[[], Any]] = {
+            "exit_country": client.get_exit_country,
+            "num_circuits": lambda: len(client.list_circuits()),
+            "health": lambda: client.benchmark().as_dict(),
+        }
+        for field, fetch in details.items():
+            try:
+                snapshot[field] = fetch()
+            except Exception as error:
+                snapshot["errors"][field] = error_message(error, client.password)
+        if snapshot["health"] is not None and not snapshot["health"]["ok"]:
+            snapshot["errors"]["health"] = "No benchmark metric could be measured."
 
     if as_json:
         print(json.dumps(snapshot))
     else:
         print(f"ready: {snapshot['ready']}")
+        for name, check in snapshot["checks"].items():
+            detail = check.get("message", "")
+            progress = check.get("progress")
+            if progress is not None:
+                detail = f"{progress}% {detail}".strip()
+            suffix = f" ({detail})" if detail else ""
+            print(f"{name}: {check['status']}{suffix}")
         print(f"ip: {snapshot['ip']}")
         print(f"exit_country: {snapshot['exit_country']}")
         print(f"num_circuits: {snapshot['num_circuits']}")
-    return 0
+        for field, detail_error in snapshot["errors"].items():
+            print(f"{field} error: {detail_error}")
+    return 0 if snapshot["ready"] else 1
 
 
 _COMMANDS = {
@@ -153,8 +191,12 @@ def main(argv: Optional[list] = None) -> int:
     )
     try:
         return _COMMANDS[args.command](client, args.json)
-    except TorSessionError as e:
-        print(f"error: {e}", file=sys.stderr)
+    except TorSessionError as error:
+        message = error_message(error, args.password)
+        if args.json:
+            print(json.dumps({"error": message}))
+        else:
+            print(f"error: {message}", file=sys.stderr)
         return 1
 
 
